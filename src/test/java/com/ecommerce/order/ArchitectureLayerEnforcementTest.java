@@ -21,8 +21,11 @@ class ArchitectureLayerEnforcementTest {
             .layer("Application").definedBy("com.ecommerce.order.application..")
             .layer("Domain").definedBy("com.ecommerce.order.domain..")
             .layer("Infrastructure").definedBy("com.ecommerce.order.infrastructure..")
+            .layer("Export").definedBy("com.ecommerce.order.export..")
             .whereLayer("Presentation").mayNotBeAccessedByAnyLayer()
             .whereLayer("Infrastructure").mayNotBeAccessedByAnyLayer()
+            .whereLayer("Export").mayNotBeAccessedByAnyLayer()
+            .whereLayer("Export").mayOnlyAccessLayers("Domain")
             .whereLayer("Application").mayOnlyBeAccessedByLayers("Presentation", "Infrastructure")
             .whereLayer("Application").mayOnlyAccessLayers("Domain")
             .whereLayer("Domain").mayNotAccessAnyLayer();
@@ -31,6 +34,12 @@ class ArchitectureLayerEnforcementTest {
     static final ArchRule packagesAreFreeOfCycles = slices()
             .matching("com.ecommerce.order.(*)..")
             .should().beFreeOfCycles();
+
+    @ArchTest
+    static final ArchRule exportDependsOnlyOnDomain = classes()
+            .that().resideInAPackage("com.ecommerce.order.export..")
+            .should().onlyDependOnClassesThat().resideInAnyPackage(
+                    "java..", "com.ecommerce.order.export..", "com.ecommerce.order.domain..");
 
     @ArchTest
     static final ArchRule domainIsPureJava = classes()
