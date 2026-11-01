@@ -16,12 +16,12 @@ If `clean` fails with `Failed to delete target`, the VS Code Java extension was 
 - **Must show:** the last `Tests run: 97, Failures: 0, Errors: 0, Skipped: 0` line and `BUILD SUCCESS`.
 
 ### 3. MockMvc status code tests
-- **Run:** `./mvnw test -Dtest=OrderControllerWebMvcTest -Dsurefire.reportFormat=plain -Dsurefire.useFile=false`
+- **Run:** `./mvnw test -Dtest=OrderControllerWebMvcTest "-Dsurefire.reportFormat=plain" "-Dsurefire.useFile=false"`
 - **Must show:** the test names with 200, 201, 400, 404, 409, and 500 in them, `Tests run: 11, Failures: 0`, and `BUILD SUCCESS`.
 - **Note:** a stack trace appears in this output on purpose. The 500 test forces an error, and the server logs it. The HTTP response stays generic, which the test asserts.
 
 ### 4. Architecture rules with zero cycles
-- **Run:** `./mvnw test -Dtest=ArchitectureLayerEnforcementTest -Dsurefire.reportFormat=plain -Dsurefire.useFile=false`
+- **Run:** `./mvnw test -Dtest=ArchitectureLayerEnforcementTest "-Dsurefire.reportFormat=plain" "-Dsurefire.useFile=false"`
 - **Must show:** `packagesAreFreeOfCycles`, `layersPointInward`, `domainIsPureJava`, `Tests run: 8, Failures: 0`, and `BUILD SUCCESS`.
 
 ### 5. Live demo
@@ -60,7 +60,7 @@ Do these after the branch is pushed and the PR exists.
 ## Bonus evidence
 
 ### 10. Export pipeline and CSV sample
-- **Run:** `./mvnw test -Dtest=OrderExportPipelineTest -Dsurefire.reportFormat=plain -Dsurefire.useFile=false`
+- **Run:** `./mvnw test -Dtest=OrderExportPipelineTest "-Dsurefire.reportFormat=plain" "-Dsurefire.useFile=false"`
 - **Must show:** `shouldStreamTenThousandOrders`, `Tests run: 9, Failures: 0`, and `BUILD SUCCESS`.
 - **Then run:** `cat target/export/order-export-sample.csv`
 - **Must show:** the header and 3 rows. Row 3 shows a spreadsheet formula neutralized as `'=SUM(A1:A9)`.
