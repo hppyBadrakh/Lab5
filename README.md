@@ -1,25 +1,59 @@
-# E-Commerce Structural Design Patterns
+# E-Commerce Order Subsystem
 
-Starter project for ICSI304 Week 5: Adapter, Facade, Decorator, Composite, Proxy, and ADR-0003.
+ICSI304 coursework. The Week 7 work is a layered Spring Boot order subsystem in `com.ecommerce.order`. The Week 5 structural pattern code remains in `mn.edu.num.sad.ecommerce`.
 
 ## Requirements
-- JDK 21
-- Maven (or Maven Wrapper once generated)
+- JDK 21 (`JAVA_HOME` must point at it)
+- No Maven install needed: use the wrapper
 
-## Verify
+## Build and test
 ```powershell
-mvn verify
+.\mvnw.cmd clean verify
+```
+On Linux, macOS, or Git Bash, use `./mvnw clean verify`.
+
+The build compiles with `-Xlint:all` and fails on any compiler warning.
+
+## Run
+```powershell
+.\mvnw.cmd spring-boot:run
 ```
 
-After generating the Maven Wrapper, use:
-```powershell
-.\mvnw.cmd verify
-```
+| URL | Purpose |
+|---|---|
+| `POST /api/v1/orders` | Create an order (201 + `Location`) |
+| `GET /api/v1/orders/{id}` | Read an order (200, or 404) |
+| `POST /api/v1/orders/{id}/cancel` | Cancel an order (200, or 409 if the state forbids it) |
+| http://localhost:8080/swagger-ui.html | Swagger UI |
+| http://localhost:8080/v3/api-docs | OpenAPI document |
 
-## Git workflow
-The assignment expects a baseline branch named `m3-modelling`, a target branch named `m4-structures`, and five feature branches:
-- `feature/adapter-legacy`
-- `feature/checkout-facade`
-- `feature/log-decorator`
-- `feature/item-tree`
-- `feature/catalogue-cache`
+Errors are RFC 7807 `ProblemDetail` responses.
+
+Orders live in memory, so they disappear when the application stops.
+
+## Demo
+```bash
+bash scripts/demo.sh
+```
+This builds the jar if needed, starts the application, walks through the 201, 200, 404, 400, and 409 cases with `curl`, and stops the application. If something already answers on `BASE_URL` (default `http://localhost:8080`), the script uses that instead.
+
+## Architecture
+```text
+Presentation -> Application -> Domain <- Infrastructure
+```
+| Package | Contents |
+|---|---|
+| `presentation` | `OrderController`, DTOs, `GlobalExceptionHandler` |
+| `application` | `OrderApplicationService`, `OrderRepository` port, application exceptions |
+| `domain` | `Order`, `OrderItem`, `Money`, `OrderStatus` (pure Java) |
+| `infrastructure` | `InMemoryOrderRepository` adapter |
+| `export` | Bonus Pipe-and-Filter CSV pipeline (depends on `domain` only) |
+
+`ArchitectureLayerEnforcementTest` enforces these rules with ArchUnit. See [ADR-0005](docs/adr/0005-layered-mvc-for-orders.md) and the [M2 progress note](docs/m2-progress.md).
+
+`legacy/LegacyOrderEndpoint.java` is the "before" code. It sits outside `src/` and is not compiled.
+
+## Branches
+- `m5-behaviour`: baseline
+- `feature/styles-I-sbs`: Week 7 work
+- `m6-styles`: integration branch and pull request target
