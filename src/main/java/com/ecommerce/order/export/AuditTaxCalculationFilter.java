@@ -1,8 +1,10 @@
 package com.ecommerce.order.export;
 
+import java.math.BigDecimal;
+
 public class AuditTaxCalculationFilter implements Filter<ExportStages.Normalized, ExportStages.Taxed> {
 
-    private static final double TAX_RATE = 0.10;
+    private static final BigDecimal TAX_RATE = new BigDecimal("0.10");
 
     @Override
     public ExportStages.Taxed process(ExportStages.Normalized order) {

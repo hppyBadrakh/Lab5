@@ -1,55 +1,100 @@
 package com.ecommerce.order.application;
 
-import com.ecommerce.order.domain.Money;
-import com.ecommerce.order.domain.Order;
-import com.ecommerce.order.domain.OrderItem;
+import com.ecommerce.order.domain.model.CustomerId;
+import com.ecommerce.order.domain.model.Money;
+import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderId;
+import com.ecommerce.order.domain.model.Quantity;
+import com.ecommerce.order.domain.model.Sku;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
+import com.ecommerce.order.domain.port.out.DomainEventPublisher;
+import com.ecommerce.order.domain.port.out.OrderRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.Currency;
 import java.util.Objects;
+import java.util.function.Consumer;
 
+/**
+ * Implements the inbound port. Use case orchestration only: load, call the aggregate, save, publish events.
+ * Business rules live in {@link Order}. This class translates domain rejections into
+ * application exceptions (400 for bad input, 409 for an illegal state change).
+ */
 @Service
-public class OrderApplicationService {
+public class OrderApplicationService implements ManageOrdersUseCase {
 
     private final OrderRepository orderRepository;
+    private final DomainEventPublisher eventPublisher;
 
-    public OrderApplicationService(OrderRepository orderRepository) {
+    public OrderApplicationService(OrderRepository orderRepository, DomainEventPublisher eventPublisher) {
         this.orderRepository = Objects.requireNonNull(orderRepository);
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
     }
 
-    public Order createOrder(String customerId, List<OrderItemCommand> itemCommands) {
-        if (customerId == null || customerId.isBlank()) {
-            throw new InvalidOrderRequestException("Customer ID required");
+    @Override
+    public Order placeOrder(PlaceOrderCommand command) {
+        Objects.requireNonNull(command, "Command must not be null");
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new InvalidOrderRequestException("At least one line item required");
         }
-        if (itemCommands == null || itemCommands.isEmpty()) {
-            throw new InvalidOrderRequestException("At least one item required");
+        if (command.shippingAddress() == null) {
+            throw new InvalidOrderRequestException("Shipping address required");
         }
+        Order order;
         try {
-            List<OrderItem> domainItems = itemCommands.stream()
-                    .map(cmd -> new OrderItem(cmd.productId(), cmd.productName(),
-                            Money.of(cmd.unitPrice(), cmd.currency()), cmd.quantity()))
-                    .toList();
-            return orderRepository.save(new Order(customerId, domainItems));
-        } catch (IllegalArgumentException ex) {
+            order = new Order(OrderId.generate(), new CustomerId(command.customerId()),
+                    Currency.getInstance(command.lines().getFirst().currency()), command.shippingAddress().toDomain());
+            for (OrderLineCommand line : command.lines()) {
+                order.addLineItem(new Sku(line.sku()),
+                        Money.of(line.unitPrice(), Currency.getInstance(line.currency())),
+                        new Quantity(line.quantity()));
+            }
+            order.placeOrder();
+        } catch (IllegalArgumentException | IllegalStateException ex) {
             throw new InvalidOrderRequestException(ex.getMessage(), ex);
         }
+        return saveAndPublish(order);
     }
 
-    public Order getOrderById(String orderId) {
-        return orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+    @Override
+    public Order getOrder(String orderId) {
+        return load(orderId);
     }
 
+    @Override
+    public Order payOrder(String orderId) {
+        return change(orderId, Order::markAsPaid);
+    }
+
+    @Override
     public Order cancelOrder(String orderId) {
-        Order order = getOrderById(orderId);
+        return change(orderId, Order::cancel);
+    }
+
+    private Order change(String orderId, Consumer<Order> command) {
+        Order order = load(orderId);
         try {
-            order.cancel();
+            command.accept(order);
         } catch (IllegalStateException ex) {
             throw new InvalidOrderOperationException(ex.getMessage(), ex);
         }
-        return orderRepository.save(order);
+        return saveAndPublish(order);
     }
 
-    public record OrderItemCommand(String productId, String productName, double unitPrice,
-                                   String currency, int quantity) {
+    /** Events are published only after the save succeeded, so listeners never see an order that was not stored. */
+    private Order saveAndPublish(Order order) {
+        Order saved = orderRepository.save(order);
+        eventPublisher.publish(saved.pullDomainEvents());
+        return saved;
+    }
+
+    private Order load(String orderId) {
+        OrderId id;
+        try {
+            id = new OrderId(orderId);
+        } catch (IllegalArgumentException ex) {
+            throw new OrderNotFoundException(orderId);
+        }
+        return orderRepository.findById(id).orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 }

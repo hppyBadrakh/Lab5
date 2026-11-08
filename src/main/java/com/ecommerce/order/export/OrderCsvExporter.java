@@ -1,6 +1,6 @@
 package com.ecommerce.order.export;
 
-import com.ecommerce.order.domain.Order;
+import com.ecommerce.order.domain.model.Order;
 
 import java.io.IOException;
 import java.io.Writer;
