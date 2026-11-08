@@ -1,5 +1,9 @@
 package com.ecommerce.order.domain.model;
 
+import com.ecommerce.order.domain.event.DomainEvent;
+import com.ecommerce.order.domain.event.OrderCancelledDomainEvent;
+import com.ecommerce.order.domain.event.OrderPlacedDomainEvent;
+
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -8,6 +12,7 @@ import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Aggregate root of the Order Processing context and its consistency boundary.
@@ -20,6 +25,8 @@ import java.util.Optional;
  *   <li>status changes follow {@link OrderStatus#canTransitionTo(OrderStatus)}.</li>
  * </ol>
  * A rejected command throws and leaves the aggregate unchanged.
+ * Successful state changes record domain events, which the application layer collects with
+ * {@link #pullDomainEvents()} after saving, so side effects never run inside the aggregate.
  */
 public class Order {
 
@@ -30,6 +37,7 @@ public class Order {
     private final Currency currency;
     private final ShippingAddress shippingAddress;
     private final List<OrderItem> items = new ArrayList<>();
+    private final List<DomainEvent> domainEvents = new ArrayList<>();
     private final Clock clock;
     private final Instant createdAt;
     private OrderStatus status = OrderStatus.DRAFT;
@@ -82,6 +90,7 @@ public class Order {
             throw new IllegalStateException("Cannot place an order with zero line items");
         }
         transitionTo(OrderStatus.PLACED);
+        domainEvents.add(new OrderPlacedDomainEvent(UUID.randomUUID(), id, customerId, calculateTotal(), updatedAt));
     }
 
     public void markAsPaid() {
@@ -89,7 +98,16 @@ public class Order {
     }
 
     public void cancel() {
+        OrderStatus previous = status;
         transitionTo(OrderStatus.CANCELLED);
+        domainEvents.add(new OrderCancelledDomainEvent(UUID.randomUUID(), id, previous, updatedAt));
+    }
+
+    /** Returns the events recorded since the last call and clears them, so each event is published once. */
+    public List<DomainEvent> pullDomainEvents() {
+        List<DomainEvent> events = List.copyOf(domainEvents);
+        domainEvents.clear();
+        return events;
     }
 
     public Money calculateTotal() {

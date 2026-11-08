@@ -1,5 +1,6 @@
 package com.ecommerce.order.infrastructure.adapter.in.web;
 
+import com.ecommerce.order.infrastructure.adapter.in.event.OrderAuditEventListener;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,6 +30,9 @@ class OrderApiIntegrationMvcTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private OrderAuditEventListener auditListener;
 
     private static String body(String... items) {
         return "{\"customerId\":\"CUST-1\"," + ADDRESS + ",\"items\":[" + String.join(",", items) + "]}";
@@ -60,6 +65,19 @@ class OrderApiIntegrationMvcTest {
                 .andExpect(jsonPath("$.detail").value(containsString("CANCELLED")));
         mockMvc.perform(post(location + "/pay"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Placing an order reaches the decoupled audit listener through the domain event")
+    void shouldAuditPlacedOrder() throws Exception {
+        String location = placeOrder();
+        String orderId = location.substring(location.lastIndexOf('/') + 1);
+
+        assertThat(auditListener.getRecordedAudits())
+                .anySatisfy(event -> {
+                    assertThat(event.orderId().value()).isEqualTo(orderId);
+                    assertThat(event.orderTotal().amount()).isEqualByComparingTo("25.00");
+                });
     }
 
     @Test

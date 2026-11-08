@@ -1,5 +1,7 @@
 package com.ecommerce.order.domain.model;
 
+import com.ecommerce.order.domain.event.OrderCancelledDomainEvent;
+import com.ecommerce.order.domain.event.OrderPlacedDomainEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -237,6 +239,69 @@ class OrderAggregateTest {
 
             assertThat(timed.getCreatedAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
             assertThat(timed.getUpdatedAt()).isEqualTo(Instant.parse("2026-01-01T00:05:00Z"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Domain events")
+    class DomainEvents {
+
+        @Test
+        @DisplayName("placeOrder records exactly one OrderPlacedDomainEvent with the order facts")
+        void shouldRecordOrderPlaced() {
+            Instant now = Instant.parse("2026-11-08T10:00:00Z");
+            Order timed = new Order(new OrderId("ORD-42"), new CustomerId("CUST-1"), USD, ADDRESS,
+                    Clock.fixed(now, ZoneOffset.UTC));
+            timed.addLineItem(KEYBOARD, Money.of("150.00", "USD"), new Quantity(2));
+
+            timed.placeOrder();
+
+            assertThat(timed.pullDomainEvents()).singleElement()
+                    .isInstanceOfSatisfying(OrderPlacedDomainEvent.class, event -> {
+                        assertThat(event.orderId()).isEqualTo(new OrderId("ORD-42"));
+                        assertThat(event.customerId()).isEqualTo(new CustomerId("CUST-1"));
+                        assertThat(event.orderTotal()).isEqualTo(Money.of("300.00", "USD"));
+                        assertThat(event.occurredOn()).isEqualTo(now);
+                        assertThat(event.eventId()).isNotNull();
+                    });
+        }
+
+        @Test
+        @DisplayName("pullDomainEvents hands each event out only once")
+        void shouldClearEventsAfterPull() {
+            order.addLineItem(KEYBOARD, Money.of("1.00", "USD"), new Quantity(1));
+            order.placeOrder();
+
+            assertThat(order.pullDomainEvents()).hasSize(1);
+            assertThat(order.pullDomainEvents()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("cancel records OrderCancelledDomainEvent with the previous status")
+        void shouldRecordOrderCancelled() {
+            order.addLineItem(KEYBOARD, Money.of("1.00", "USD"), new Quantity(1));
+            order.placeOrder();
+            order.markAsPaid();
+            order.pullDomainEvents();
+
+            order.cancel();
+
+            assertThat(order.pullDomainEvents()).singleElement()
+                    .isInstanceOfSatisfying(OrderCancelledDomainEvent.class,
+                            event -> assertThat(event.previousStatus()).isEqualTo(OrderStatus.PAID));
+        }
+
+        @Test
+        @DisplayName("Adding items, paying and rejected commands record no events")
+        void shouldNotRecordEventsForOtherChanges() {
+            order.addLineItem(KEYBOARD, Money.of("1.00", "USD"), new Quantity(1));
+            assertThatThrownBy(order::markAsPaid).isInstanceOf(IllegalStateException.class);
+            assertThat(order.pullDomainEvents()).isEmpty();
+
+            order.placeOrder();
+            order.pullDomainEvents();
+            order.markAsPaid();
+            assertThat(order.pullDomainEvents()).isEmpty();
         }
     }
 

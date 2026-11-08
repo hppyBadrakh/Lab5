@@ -7,6 +7,7 @@ import com.ecommerce.order.domain.model.OrderId;
 import com.ecommerce.order.domain.model.Quantity;
 import com.ecommerce.order.domain.model.Sku;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
+import com.ecommerce.order.domain.port.out.DomainEventPublisher;
 import com.ecommerce.order.domain.port.out.OrderRepository;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +16,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Implements the inbound port. Use case orchestration only: load, call the aggregate, save.
+ * Implements the inbound port. Use case orchestration only: load, call the aggregate, save, publish events.
  * Business rules live in {@link Order}. This class translates domain rejections into
  * application exceptions (400 for bad input, 409 for an illegal state change).
  */
@@ -23,9 +24,11 @@ import java.util.function.Consumer;
 public class OrderApplicationService implements ManageOrdersUseCase {
 
     private final OrderRepository orderRepository;
+    private final DomainEventPublisher eventPublisher;
 
-    public OrderApplicationService(OrderRepository orderRepository) {
+    public OrderApplicationService(OrderRepository orderRepository, DomainEventPublisher eventPublisher) {
         this.orderRepository = Objects.requireNonNull(orderRepository);
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
     }
 
     @Override
@@ -50,7 +53,7 @@ public class OrderApplicationService implements ManageOrdersUseCase {
         } catch (IllegalArgumentException | IllegalStateException ex) {
             throw new InvalidOrderRequestException(ex.getMessage(), ex);
         }
-        return orderRepository.save(order);
+        return saveAndPublish(order);
     }
 
     @Override
@@ -75,7 +78,14 @@ public class OrderApplicationService implements ManageOrdersUseCase {
         } catch (IllegalStateException ex) {
             throw new InvalidOrderOperationException(ex.getMessage(), ex);
         }
-        return orderRepository.save(order);
+        return saveAndPublish(order);
+    }
+
+    /** Events are published only after the save succeeded, so listeners never see an order that was not stored. */
+    private Order saveAndPublish(Order order) {
+        Order saved = orderRepository.save(order);
+        eventPublisher.publish(saved.pullDomainEvents());
+        return saved;
     }
 
     private Order load(String orderId) {

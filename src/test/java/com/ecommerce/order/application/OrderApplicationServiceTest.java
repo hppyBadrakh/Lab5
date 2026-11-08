@@ -1,15 +1,20 @@
 package com.ecommerce.order.application;
 
+import com.ecommerce.order.domain.event.DomainEvent;
+import com.ecommerce.order.domain.event.OrderCancelledDomainEvent;
+import com.ecommerce.order.domain.event.OrderPlacedDomainEvent;
+import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderStatus;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.AddressCommand;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.OrderLineCommand;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PlaceOrderCommand;
-import com.ecommerce.order.domain.model.Order;
-import com.ecommerce.order.domain.model.OrderStatus;
+import com.ecommerce.order.domain.port.out.DomainEventPublisher;
 import com.ecommerce.order.infrastructure.adapter.out.persistence.InMemoryOrderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,7 +27,25 @@ class OrderApplicationServiceTest {
     private static final OrderLineCommand EUR_LINE = new OrderLineCommand("ELEC-2002", new BigDecimal("10.00"), "EUR", 1);
 
     private final InMemoryOrderRepository repository = new InMemoryOrderRepository();
-    private final OrderApplicationService service = new OrderApplicationService(repository);
+    private final RecordingPublisher publisher = new RecordingPublisher();
+    private final OrderApplicationService service = new OrderApplicationService(repository, publisher);
+
+    /** Records what was published and whether the order was already stored at that moment. */
+    private final class RecordingPublisher implements DomainEventPublisher {
+
+        private final List<DomainEvent> published = new ArrayList<>();
+        private boolean storedBeforePublish = true;
+
+        @Override
+        public void publish(List<DomainEvent> events) {
+            for (DomainEvent event : events) {
+                if (event instanceof OrderPlacedDomainEvent placed) {
+                    storedBeforePublish &= repository.existsById(placed.orderId());
+                }
+                published.add(event);
+            }
+        }
+    }
 
     private static PlaceOrderCommand command(String customerId, List<OrderLineCommand> lines) {
         return new PlaceOrderCommand(customerId, ADDRESS, lines);
@@ -108,5 +131,32 @@ class OrderApplicationServiceTest {
         assertThatThrownBy(() -> service.payOrder(id))
                 .isInstanceOf(InvalidOrderOperationException.class)
                 .hasMessageContaining("CANCELLED to PAID");
+    }
+
+    @Test
+    @DisplayName("OrderPlaced is published once, after the order was saved")
+    void shouldPublishOrderPlacedAfterSave() {
+        Order order = placed();
+
+        assertThat(publisher.published).singleElement()
+                .isInstanceOfSatisfying(OrderPlacedDomainEvent.class,
+                        event -> assertThat(event.orderId()).isEqualTo(order.getId()));
+        assertThat(publisher.storedBeforePublish).isTrue();
+    }
+
+    @Test
+    @DisplayName("Cancelling publishes OrderCancelled; rejected requests publish nothing")
+    void shouldPublishOnlyForSuccessfulChanges() {
+        assertThatThrownBy(() -> service.placeOrder(command("CUST-1", List.of(USD_LINE, EUR_LINE))))
+                .isInstanceOf(InvalidOrderRequestException.class);
+        assertThat(publisher.published).isEmpty();
+
+        String id = placed().getId().value();
+        service.payOrder(id);
+        service.cancelOrder(id);
+        assertThatThrownBy(() -> service.cancelOrder(id)).isInstanceOf(InvalidOrderOperationException.class);
+
+        assertThat(publisher.published).hasSize(2);
+        assertThat(publisher.published.get(1)).isInstanceOf(OrderCancelledDomainEvent.class);
     }
 }
