@@ -1,4 +1,4 @@
-package com.ecommerce.order.presentation;
+package com.ecommerce.order.infrastructure.adapter.in.web;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

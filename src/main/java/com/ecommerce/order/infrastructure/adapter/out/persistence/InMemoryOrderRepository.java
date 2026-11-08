@@ -1,6 +1,6 @@
-package com.ecommerce.order.infrastructure;
+package com.ecommerce.order.infrastructure.adapter.out.persistence;
 
-import com.ecommerce.order.application.OrderRepository;
+import com.ecommerce.order.domain.port.out.OrderRepository;
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderId;
 import org.springframework.stereotype.Repository;

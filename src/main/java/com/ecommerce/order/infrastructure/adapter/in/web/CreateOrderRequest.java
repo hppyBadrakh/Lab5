@@ -1,4 +1,4 @@
-package com.ecommerce.order.presentation;
+package com.ecommerce.order.infrastructure.adapter.in.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;

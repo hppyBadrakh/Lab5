@@ -1,4 +1,4 @@
-package com.ecommerce.order.infrastructure;
+package com.ecommerce.order.infrastructure.adapter.out.persistence;
 
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderId;

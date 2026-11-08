@@ -1,11 +1,11 @@
 package com.ecommerce.order.application;
 
-import com.ecommerce.order.application.OrderApplicationService.AddressCommand;
-import com.ecommerce.order.application.OrderApplicationService.OrderLineCommand;
-import com.ecommerce.order.application.OrderApplicationService.PlaceOrderCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.AddressCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.OrderLineCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PlaceOrderCommand;
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderStatus;
-import com.ecommerce.order.infrastructure.InMemoryOrderRepository;
+import com.ecommerce.order.infrastructure.adapter.out.persistence.InMemoryOrderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

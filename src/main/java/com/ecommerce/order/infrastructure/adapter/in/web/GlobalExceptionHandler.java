@@ -1,4 +1,4 @@
-package com.ecommerce.order.presentation;
+package com.ecommerce.order.infrastructure.adapter.in.web;
 
 import com.ecommerce.order.application.InvalidOrderOperationException;
 import com.ecommerce.order.application.InvalidOrderRequestException;

@@ -1,8 +1,8 @@
-package com.ecommerce.order.presentation;
+package com.ecommerce.order.infrastructure.adapter.in.web;
 
 import com.ecommerce.order.application.InvalidOrderOperationException;
 import com.ecommerce.order.application.InvalidOrderRequestException;
-import com.ecommerce.order.application.OrderApplicationService;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
 import com.ecommerce.order.application.OrderNotFoundException;
 import com.ecommerce.order.domain.model.OrderStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -43,7 +43,7 @@ class OrderControllerWebMvcTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private OrderApplicationService orderService;
+    private ManageOrdersUseCase orderService;
 
     @Test
     @DisplayName("POST /api/v1/orders - 201 Created with Location header and a PLACED order")

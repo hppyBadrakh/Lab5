@@ -1,4 +1,4 @@
-package com.ecommerce.order.application;
+package com.ecommerce.order.domain.port.out;
 
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderId;

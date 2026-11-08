@@ -1,6 +1,6 @@
 package com.ecommerce.order;
 
-import com.ecommerce.order.application.OrderRepository;
+import com.ecommerce.order.domain.port.out.OrderRepository;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -17,16 +17,14 @@ class ArchitectureLayerEnforcementTest {
     @ArchTest
     static final ArchRule layersPointInward = layeredArchitecture()
             .consideringOnlyDependenciesInLayers()
-            .layer("Presentation").definedBy("com.ecommerce.order.presentation..")
             .layer("Application").definedBy("com.ecommerce.order.application..")
             .layer("Domain").definedBy("com.ecommerce.order.domain..")
-            .layer("Infrastructure").definedBy("com.ecommerce.order.infrastructure..")
+            .layer("Adapters").definedBy("com.ecommerce.order.infrastructure..")
             .layer("Export").definedBy("com.ecommerce.order.export..")
-            .whereLayer("Presentation").mayNotBeAccessedByAnyLayer()
-            .whereLayer("Infrastructure").mayNotBeAccessedByAnyLayer()
+            .whereLayer("Adapters").mayNotBeAccessedByAnyLayer()
             .whereLayer("Export").mayNotBeAccessedByAnyLayer()
             .whereLayer("Export").mayOnlyAccessLayers("Domain")
-            .whereLayer("Application").mayOnlyBeAccessedByLayers("Presentation", "Infrastructure")
+            .whereLayer("Application").mayOnlyBeAccessedByLayers("Adapters")
             .whereLayer("Application").mayOnlyAccessLayers("Domain")
             .whereLayer("Domain").mayNotAccessAnyLayer();
 
@@ -52,18 +50,18 @@ class ArchitectureLayerEnforcementTest {
             .should().dependOnClassesThat().resideInAnyPackage("org.springframework..", "jakarta..");
 
     @ArchTest
-    static final ArchRule infrastructureImplementsApplicationPort = classes()
+    static final ArchRule repositoryAdaptersImplementTheDomainPort = classes()
             .that().resideInAPackage("com.ecommerce.order.infrastructure..")
             .and().haveSimpleNameEndingWith("Repository")
             .should().implement(OrderRepository.class);
 
     @ArchTest
-    static final ArchRule portsLiveInApplicationLayer = classes()
+    static final ArchRule repositoryPortsLiveInTheDomain = classes()
             .that().haveSimpleNameEndingWith("Repository").and().areInterfaces()
-            .should().resideInAPackage("com.ecommerce.order.application..");
+            .should().resideInAPackage("com.ecommerce.order.domain.port.out..");
 
     @ArchTest
     static final ArchRule controllersDoNotTouchTheRepository = noClasses()
-            .that().resideInAPackage("com.ecommerce.order.presentation..")
+            .that().resideInAPackage("com.ecommerce.order.infrastructure.adapter.in.web..")
             .should().dependOnClassesThat().areAssignableTo(OrderRepository.class);
 }

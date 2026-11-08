@@ -1,9 +1,9 @@
-package com.ecommerce.order.presentation;
+package com.ecommerce.order.infrastructure.adapter.in.web;
 
-import com.ecommerce.order.application.OrderApplicationService;
-import com.ecommerce.order.application.OrderApplicationService.AddressCommand;
-import com.ecommerce.order.application.OrderApplicationService.OrderLineCommand;
-import com.ecommerce.order.application.OrderApplicationService.PlaceOrderCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.AddressCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.OrderLineCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PlaceOrderCommand;
 import com.ecommerce.order.domain.model.Order;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -21,9 +21,9 @@ import java.net.URI;
 @RequestMapping("/api/v1/orders")
 public class OrderController {
 
-    private final OrderApplicationService orderService;
+    private final ManageOrdersUseCase orderService;
 
-    public OrderController(OrderApplicationService orderService) {
+    public OrderController(ManageOrdersUseCase orderService) {
         this.orderService = orderService;
     }
 
