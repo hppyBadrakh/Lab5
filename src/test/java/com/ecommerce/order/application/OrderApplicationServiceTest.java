@@ -1,12 +1,15 @@
 package com.ecommerce.order.application;
 
-import com.ecommerce.order.application.OrderApplicationService.OrderItemCommand;
-import com.ecommerce.order.domain.Order;
-import com.ecommerce.order.domain.OrderStatus;
+import com.ecommerce.order.application.OrderApplicationService.AddressCommand;
+import com.ecommerce.order.application.OrderApplicationService.OrderLineCommand;
+import com.ecommerce.order.application.OrderApplicationService.PlaceOrderCommand;
+import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderStatus;
 import com.ecommerce.order.infrastructure.InMemoryOrderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,82 +17,96 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OrderApplicationServiceTest {
 
-    private static final OrderItemCommand USD_ITEM = new OrderItemCommand("P1", "Keyboard", 25.50, "USD", 2);
-    private static final OrderItemCommand EUR_ITEM = new OrderItemCommand("P2", "Mouse", 10.00, "EUR", 1);
+    private static final AddressCommand ADDRESS = new AddressCommand("Peace Ave 1", "Ulaanbaatar", "14200", "MN");
+    private static final OrderLineCommand USD_LINE = new OrderLineCommand("ELEC-1001", new BigDecimal("25.50"), "USD", 2);
+    private static final OrderLineCommand EUR_LINE = new OrderLineCommand("ELEC-2002", new BigDecimal("10.00"), "EUR", 1);
 
-    private final OrderRepository repository = new InMemoryOrderRepository();
+    private final InMemoryOrderRepository repository = new InMemoryOrderRepository();
     private final OrderApplicationService service = new OrderApplicationService(repository);
 
-    @Test
-    @DisplayName("createOrder maps commands to a persisted PENDING order")
-    void shouldCreateOrder() {
-        Order order = service.createOrder("CUST-1", List.of(USD_ITEM));
+    private static PlaceOrderCommand command(String customerId, List<OrderLineCommand> lines) {
+        return new PlaceOrderCommand(customerId, ADDRESS, lines);
+    }
 
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+    private Order placed() {
+        return service.placeOrder(command("CUST-1", List.of(USD_LINE)));
+    }
+
+    @Test
+    @DisplayName("placeOrder builds the aggregate, places it and persists it")
+    void shouldPlaceOrder() {
+        Order order = placed();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PLACED);
         assertThat(order.calculateTotal().amount()).isEqualByComparingTo("51.00");
+        assertThat(order.getShippingAddress().city()).isEqualTo("Ulaanbaatar");
         assertThat(repository.existsById(order.getId())).isTrue();
     }
 
     @Test
-    @DisplayName("createOrder rejects a blank customer id")
-    void shouldRejectBlankCustomer() {
-        assertThatThrownBy(() -> service.createOrder("  ", List.of(USD_ITEM)))
+    @DisplayName("placeOrder rejects a blank customer id, missing lines and a missing address")
+    void shouldRejectInvalidRequests() {
+        assertThatThrownBy(() -> service.placeOrder(command("  ", List.of(USD_LINE))))
                 .isInstanceOf(InvalidOrderRequestException.class);
+        assertThatThrownBy(() -> service.placeOrder(command("CUST-1", null)))
+                .isInstanceOf(InvalidOrderRequestException.class);
+        assertThatThrownBy(() -> service.placeOrder(command("CUST-1", List.of())))
+                .isInstanceOf(InvalidOrderRequestException.class);
+        assertThatThrownBy(() -> service.placeOrder(new PlaceOrderCommand("CUST-1", null, List.of(USD_LINE))))
+                .isInstanceOf(InvalidOrderRequestException.class);
+        assertThat(repository.count()).isZero();
     }
 
     @Test
-    @DisplayName("createOrder rejects missing items")
-    void shouldRejectMissingItems() {
-        assertThatThrownBy(() -> service.createOrder("CUST-1", null))
-                .isInstanceOf(InvalidOrderRequestException.class);
-        assertThatThrownBy(() -> service.createOrder("CUST-1", List.of()))
-                .isInstanceOf(InvalidOrderRequestException.class);
-    }
-
-    @Test
-    @DisplayName("Domain rejection of mixed currencies is translated and nothing is persisted")
-    void shouldTranslateDomainRejection() {
-        assertThatThrownBy(() -> service.createOrder("CUST-1", List.of(USD_ITEM, EUR_ITEM)))
+    @DisplayName("Domain rejections (currency, SKU format, limit) become request errors and nothing is persisted")
+    void shouldTranslateDomainRejections() {
+        assertThatThrownBy(() -> service.placeOrder(command("CUST-1", List.of(USD_LINE, EUR_LINE))))
                 .isInstanceOf(InvalidOrderRequestException.class)
-                .hasMessageContaining("same currency");
-        assertThat(repository.findAll()).isEmpty();
+                .hasMessageContaining("Currency mismatch");
+        assertThatThrownBy(() -> service.placeOrder(command("CUST-1",
+                List.of(new OrderLineCommand("p1", BigDecimal.ONE, "USD", 1)))))
+                .isInstanceOf(InvalidOrderRequestException.class)
+                .hasMessageContaining("Invalid SKU");
+        assertThatThrownBy(() -> service.placeOrder(command("CUST-1",
+                List.of(new OrderLineCommand("ELEC-1001", new BigDecimal("5000.01"), "USD", 2)))))
+                .isInstanceOf(InvalidOrderRequestException.class)
+                .hasMessageContaining("limit");
+        assertThat(repository.count()).isZero();
     }
 
     @Test
-    @DisplayName("A non-finite price is a request error, not a server error")
-    void shouldRejectNonFinitePrice() {
-        OrderItemCommand infinite = new OrderItemCommand("P1", "Keyboard", Double.POSITIVE_INFINITY, "USD", 1);
-
-        assertThatThrownBy(() -> service.createOrder("CUST-1", List.of(infinite)))
-                .isInstanceOf(InvalidOrderRequestException.class);
-    }
-
-    @Test
-    @DisplayName("getOrderById throws for an unknown id")
+    @DisplayName("getOrder throws for an unknown or malformed id")
     void shouldThrowWhenNotFound() {
-        assertThatThrownBy(() -> service.getOrderById("UNKNOWN"))
+        assertThatThrownBy(() -> service.getOrder("UNKNOWN"))
                 .isInstanceOf(OrderNotFoundException.class)
                 .hasMessageContaining("UNKNOWN");
+        assertThatThrownBy(() -> service.getOrder(" ")).isInstanceOf(OrderNotFoundException.class);
     }
 
     @Test
-    @DisplayName("cancelOrder cancels a pending order and persists it")
-    void shouldCancel() {
-        Order order = service.createOrder("CUST-1", List.of(USD_ITEM));
+    @DisplayName("payOrder and cancelOrder change the stored aggregate")
+    void shouldPayThenCancel() {
+        Order order = placed();
+        String id = order.getId().value();
 
-        service.cancelOrder(order.getId());
+        service.payOrder(id);
+        assertThat(service.getOrder(id).getStatus()).isEqualTo(OrderStatus.PAID);
 
-        assertThat(service.getOrderById(order.getId()).getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        service.cancelOrder(id);
+        assertThat(service.getOrder(id).getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 
     @Test
-    @DisplayName("Cancelling twice is an invalid operation")
-    void shouldRejectSecondCancel() {
-        Order order = service.createOrder("CUST-1", List.of(USD_ITEM));
-        service.cancelOrder(order.getId());
+    @DisplayName("Illegal transitions become invalid operations (409)")
+    void shouldRejectIllegalTransitions() {
+        String id = placed().getId().value();
+        service.cancelOrder(id);
 
-        assertThatThrownBy(() -> service.cancelOrder(order.getId()))
+        assertThatThrownBy(() -> service.cancelOrder(id))
                 .isInstanceOf(InvalidOrderOperationException.class)
                 .hasMessageContaining("CANCELLED");
+        assertThatThrownBy(() -> service.payOrder(id))
+                .isInstanceOf(InvalidOrderOperationException.class)
+                .hasMessageContaining("CANCELLED to PAID");
     }
 }

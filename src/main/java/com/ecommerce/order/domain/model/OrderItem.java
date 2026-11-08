@@ -27,11 +27,6 @@ public class OrderItem {
         return unitPrice.multiply(quantity.value());
     }
 
-    /** The subtotal this line would have after adding {@code extra}, without changing the line. */
-    Money subtotalAfterAdding(Quantity extra) {
-        return unitPrice.multiply(quantity.plus(extra).value());
-    }
-
     void increaseQuantityBy(Quantity extra) {
         this.quantity = quantity.plus(extra);
     }

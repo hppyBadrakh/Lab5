@@ -1,8 +1,10 @@
 package com.ecommerce.order.presentation;
 
 import com.ecommerce.order.application.OrderApplicationService;
-import com.ecommerce.order.application.OrderApplicationService.OrderItemCommand;
-import com.ecommerce.order.domain.Order;
+import com.ecommerce.order.application.OrderApplicationService.AddressCommand;
+import com.ecommerce.order.application.OrderApplicationService.OrderLineCommand;
+import com.ecommerce.order.application.OrderApplicationService.PlaceOrderCommand;
+import com.ecommerce.order.domain.model.Order;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/orders")
@@ -27,26 +28,37 @@ public class OrderController {
     }
 
     @PostMapping
-    public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
-        List<OrderItemCommand> commands = request.items().stream()
-                .map(item -> new OrderItemCommand(item.productId(), item.productName(), item.unitPrice(),
-                        item.currency(), item.quantity()))
-                .toList();
-        Order order = orderService.createOrder(request.customerId(), commands);
+    public ResponseEntity<OrderResponse> placeOrder(@Valid @RequestBody CreateOrderRequest request) {
+        Order order = orderService.placeOrder(toCommand(request));
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
-                .buildAndExpand(order.getId())
+                .buildAndExpand(order.getId().value())
                 .toUri();
         return ResponseEntity.created(location).body(OrderResponse.fromDomain(order));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<OrderResponse> getOrderById(@PathVariable String id) {
-        return ResponseEntity.ok(OrderResponse.fromDomain(orderService.getOrderById(id)));
+    public ResponseEntity<OrderResponse> getOrder(@PathVariable String id) {
+        return ResponseEntity.ok(OrderResponse.fromDomain(orderService.getOrder(id)));
+    }
+
+    @PostMapping("/{id}/pay")
+    public ResponseEntity<OrderResponse> payOrder(@PathVariable String id) {
+        return ResponseEntity.ok(OrderResponse.fromDomain(orderService.payOrder(id)));
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<OrderResponse> cancelOrder(@PathVariable String id) {
         return ResponseEntity.ok(OrderResponse.fromDomain(orderService.cancelOrder(id)));
+    }
+
+    private static PlaceOrderCommand toCommand(CreateOrderRequest request) {
+        ShippingAddressDto address = request.shippingAddress();
+        return new PlaceOrderCommand(
+                request.customerId(),
+                new AddressCommand(address.street(), address.city(), address.postalCode(), address.countryCode()),
+                request.items().stream()
+                        .map(item -> new OrderLineCommand(item.sku(), item.unitPrice(), item.currency(), item.quantity()))
+                        .toList());
     }
 }

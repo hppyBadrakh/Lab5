@@ -1,55 +1,41 @@
 package com.ecommerce.order.infrastructure;
 
-import com.ecommerce.order.domain.Money;
-import com.ecommerce.order.domain.Order;
-import com.ecommerce.order.domain.OrderItem;
+import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderId;
+import com.ecommerce.order.domain.model.OrderStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
+import static com.ecommerce.order.OrderFixtures.order;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class InMemoryOrderRepositoryTest {
 
     private final InMemoryOrderRepository repository = new InMemoryOrderRepository();
 
-    private static Order order(String customerId) {
-        return new Order(customerId, List.of(new OrderItem("P1", "Item", Money.of(1, "USD"), 1)));
-    }
-
     @Test
-    @DisplayName("save then findById returns the order")
+    @DisplayName("save then findById returns the same aggregate")
     void shouldSaveAndFind() {
-        Order order = repository.save(order("CUST-1"));
+        Order order = repository.save(order("ORD-1", OrderStatus.PLACED));
 
-        assertThat(repository.findById(order.getId())).contains(order);
-        assertThat(repository.existsById(order.getId())).isTrue();
+        assertThat(repository.findById(new OrderId("ORD-1"))).containsSame(order);
+        assertThat(repository.existsById(new OrderId("ORD-1"))).isTrue();
     }
 
     @Test
     @DisplayName("findById is empty for an unknown id")
     void shouldReturnEmptyForUnknownId() {
-        assertThat(repository.findById("UNKNOWN")).isEmpty();
+        assertThat(repository.findById(new OrderId("UNKNOWN"))).isEmpty();
+        assertThat(repository.existsById(new OrderId("UNKNOWN"))).isFalse();
     }
 
     @Test
-    @DisplayName("findByCustomerId returns only that customer's orders")
-    void shouldFilterByCustomer() {
-        Order mine = repository.save(order("CUST-1"));
-        repository.save(order("CUST-2"));
+    @DisplayName("Saving the same id again replaces the stored aggregate")
+    void shouldReplaceOnSave() {
+        repository.save(order("ORD-1", OrderStatus.PLACED));
+        Order cancelled = repository.save(order("ORD-1", OrderStatus.CANCELLED));
 
-        assertThat(repository.findByCustomerId("cust-1")).containsExactly(mine);
-        assertThat(repository.findAll()).hasSize(2);
-    }
-
-    @Test
-    @DisplayName("deleteById removes the order")
-    void shouldDelete() {
-        Order order = repository.save(order("CUST-1"));
-
-        repository.deleteById(order.getId());
-
-        assertThat(repository.existsById(order.getId())).isFalse();
+        assertThat(repository.count()).isEqualTo(1);
+        assertThat(repository.findById(new OrderId("ORD-1"))).containsSame(cancelled);
     }
 }

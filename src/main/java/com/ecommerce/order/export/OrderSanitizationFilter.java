@@ -1,6 +1,6 @@
 package com.ecommerce.order.export;
 
-import com.ecommerce.order.domain.Order;
+import com.ecommerce.order.domain.model.Order;
 
 /** Rejects orders that cannot be audited and neutralizes text that spreadsheets would run as a formula. */
 public class OrderSanitizationFilter implements Filter<Order, ExportStages.Sanitized> {
@@ -8,8 +8,8 @@ public class OrderSanitizationFilter implements Filter<Order, ExportStages.Sanit
     @Override
     public ExportStages.Sanitized process(Order order) {
         return new ExportStages.Sanitized(
-                sanitize(order.getId()),
-                sanitize(order.getCustomerId()),
+                sanitize(order.getId().value()),
+                sanitize(order.getCustomerId().value()),
                 order.getStatus().name(),
                 order.calculateTotal(),
                 order.getCreatedAt());

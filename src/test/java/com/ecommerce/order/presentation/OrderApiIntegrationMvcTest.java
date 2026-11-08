@@ -16,64 +16,79 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Runs the real Spring wiring: controller, service and in-memory repository. */
+/** Runs the real Spring wiring: REST adapter, application service, aggregate and in-memory adapter. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class OrderApiIntegrationMvcTest {
 
     private static final String ITEM = """
-            {"productId":"%s","productName":"Item","unitPrice":12.50,"currency":"%s","quantity":2}""";
+            {"sku":"%s","unitPrice":%s,"currency":"%s","quantity":2}""";
+    private static final String ADDRESS = """
+            "shippingAddress":{"street":"Peace Ave 1","city":"Ulaanbaatar","postalCode":"14200","countryCode":"MN"}""";
 
     @Autowired
     private MockMvc mockMvc;
 
-    private String createOrder() throws Exception {
-        String body = "{\"customerId\":\"CUST-1\",\"items\":[" + ITEM.formatted("P1", "USD") + "]}";
-        return mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+    private static String body(String... items) {
+        return "{\"customerId\":\"CUST-1\"," + ADDRESS + ",\"items\":[" + String.join(",", items) + "]}";
+    }
+
+    private String placeOrder() throws Exception {
+        return mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(ITEM.formatted("ELEC-1001", "12.50", "USD"))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getHeader("Location");
     }
 
     @Test
-    @DisplayName("Create, read, cancel, cancel again: 201, 200, 200, 409")
+    @DisplayName("Place, read, pay, cancel, cancel again: 201, 200, 200, 200, 409")
     void shouldRunOrderLifecycle() throws Exception {
-        String location = createOrder();
+        String location = placeOrder();
 
         mockMvc.perform(get(location))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.status").value("PLACED"))
                 .andExpect(jsonPath("$.total").value(25.00));
+        mockMvc.perform(post(location + "/pay"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAID"));
         mockMvc.perform(post(location + "/cancel"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
         mockMvc.perform(post(location + "/cancel"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(containsString("CANCELLED")));
-        mockMvc.perform(get(location))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mockMvc.perform(post(location + "/pay"))
+                .andExpect(status().isConflict());
     }
 
     @Test
-    @DisplayName("Mixed currencies: 400 instead of a stored order that always fails with 500")
+    @DisplayName("Mixed currencies: 400 from the aggregate's currency invariant")
     void shouldRejectMixedCurrencies() throws Exception {
-        String body = "{\"customerId\":\"CUST-1\",\"items\":["
-                + ITEM.formatted("P1", "USD") + "," + ITEM.formatted("P2", "EUR") + "]}";
-
-        mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(ITEM.formatted("ELEC-1001", "12.50", "USD"), ITEM.formatted("ELEC-2002", "12.50", "EUR"))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value(containsString("same currency")));
+                .andExpect(jsonPath("$.detail").value(containsString("Currency mismatch")));
+    }
+
+    @Test
+    @DisplayName("Total above 10,000: 400 from the aggregate's limit invariant")
+    void shouldRejectOrderAboveLimit() throws Exception {
+        mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON)
+                        .content(body(ITEM.formatted("ELEC-1001", "5000.01", "USD"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("limit of 10000.00 USD")));
     }
 
     @Test
     @DisplayName("Client-supplied id and status are ignored (no over-posting)")
     void shouldIgnoreOverPostedFields() throws Exception {
-        String body = "{\"customerId\":\"CUST-1\",\"orderId\":\"HACK\",\"status\":\"PAID\",\"items\":["
-                + ITEM.formatted("P1", "USD") + "]}";
+        String body = body(ITEM.formatted("ELEC-1001", "12.50", "USD"))
+                .replace("{\"customerId\"", "{\"orderId\":\"HACK\",\"status\":\"PAID\",\"customerId\"");
 
         mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.status").value("PLACED"))
                 .andExpect(jsonPath("$.orderId").value(not("HACK")));
     }
 
@@ -91,6 +106,7 @@ class OrderApiIntegrationMvcTest {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/v1/orders']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/orders/{id}/pay']").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/orders/{id}/cancel']").exists());
     }
 }

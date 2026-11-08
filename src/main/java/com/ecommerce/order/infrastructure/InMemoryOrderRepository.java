@@ -1,11 +1,10 @@
 package com.ecommerce.order.infrastructure;
 
 import com.ecommerce.order.application.OrderRepository;
-import com.ecommerce.order.domain.Order;
+import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderId;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Repository
 public class InMemoryOrderRepository implements OrderRepository {
 
-    private final Map<String, Order> store = new ConcurrentHashMap<>();
+    private final Map<OrderId, Order> store = new ConcurrentHashMap<>();
 
     @Override
     public Order save(Order order) {
@@ -22,29 +21,17 @@ public class InMemoryOrderRepository implements OrderRepository {
     }
 
     @Override
-    public Optional<Order> findById(String id) {
+    public Optional<Order> findById(OrderId id) {
         return Optional.ofNullable(store.get(id));
     }
 
     @Override
-    public List<Order> findByCustomerId(String customerId) {
-        return store.values().stream()
-                .filter(order -> order.getCustomerId().equalsIgnoreCase(customerId))
-                .toList();
-    }
-
-    @Override
-    public List<Order> findAll() {
-        return new ArrayList<>(store.values());
-    }
-
-    @Override
-    public boolean existsById(String id) {
+    public boolean existsById(OrderId id) {
         return store.containsKey(id);
     }
 
-    @Override
-    public void deleteById(String id) {
-        store.remove(id);
+    /** Number of stored orders. Adapter-specific, used by tests. Not part of the port. */
+    public int count() {
+        return store.size();
     }
 }

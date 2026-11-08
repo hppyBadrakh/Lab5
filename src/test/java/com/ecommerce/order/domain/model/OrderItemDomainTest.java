@@ -40,9 +40,6 @@ class OrderItemDomainTest {
         OrderItem item = new OrderItem(SKU, PRICE, new Quantity(2));
         var lineId = item.getLineId();
 
-        assertThat(item.subtotalAfterAdding(new Quantity(1))).isEqualTo(Money.of("59.97", "USD"));
-        assertThat(item.getQuantity()).isEqualTo(new Quantity(2));
-
         item.increaseQuantityBy(new Quantity(3));
 
         assertThat(item.getQuantity()).isEqualTo(new Quantity(5));

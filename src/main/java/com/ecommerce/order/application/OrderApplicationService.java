@@ -1,13 +1,25 @@
 package com.ecommerce.order.application;
 
-import com.ecommerce.order.domain.Money;
-import com.ecommerce.order.domain.Order;
-import com.ecommerce.order.domain.OrderItem;
+import com.ecommerce.order.domain.model.CustomerId;
+import com.ecommerce.order.domain.model.Money;
+import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderId;
+import com.ecommerce.order.domain.model.Quantity;
+import com.ecommerce.order.domain.model.ShippingAddress;
+import com.ecommerce.order.domain.model.Sku;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
+/**
+ * Use case orchestration only: load, call the aggregate, save.
+ * Business rules live in {@link Order}. This class translates domain rejections into
+ * application exceptions (400 for bad input, 409 for an illegal state change).
+ */
 @Service
 public class OrderApplicationService {
 
@@ -17,39 +29,72 @@ public class OrderApplicationService {
         this.orderRepository = Objects.requireNonNull(orderRepository);
     }
 
-    public Order createOrder(String customerId, List<OrderItemCommand> itemCommands) {
-        if (customerId == null || customerId.isBlank()) {
-            throw new InvalidOrderRequestException("Customer ID required");
+    public Order placeOrder(PlaceOrderCommand command) {
+        Objects.requireNonNull(command, "Command must not be null");
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new InvalidOrderRequestException("At least one line item required");
         }
-        if (itemCommands == null || itemCommands.isEmpty()) {
-            throw new InvalidOrderRequestException("At least one item required");
+        if (command.shippingAddress() == null) {
+            throw new InvalidOrderRequestException("Shipping address required");
         }
+        Order order;
         try {
-            List<OrderItem> domainItems = itemCommands.stream()
-                    .map(cmd -> new OrderItem(cmd.productId(), cmd.productName(),
-                            Money.of(cmd.unitPrice(), cmd.currency()), cmd.quantity()))
-                    .toList();
-            return orderRepository.save(new Order(customerId, domainItems));
-        } catch (IllegalArgumentException ex) {
+            order = new Order(OrderId.generate(), new CustomerId(command.customerId()),
+                    Currency.getInstance(command.lines().getFirst().currency()), command.shippingAddress().toDomain());
+            for (OrderLineCommand line : command.lines()) {
+                order.addLineItem(new Sku(line.sku()),
+                        Money.of(line.unitPrice(), Currency.getInstance(line.currency())),
+                        new Quantity(line.quantity()));
+            }
+            order.placeOrder();
+        } catch (IllegalArgumentException | IllegalStateException ex) {
             throw new InvalidOrderRequestException(ex.getMessage(), ex);
         }
+        return orderRepository.save(order);
     }
 
-    public Order getOrderById(String orderId) {
-        return orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+    public Order getOrder(String orderId) {
+        return load(orderId);
+    }
+
+    public Order payOrder(String orderId) {
+        return change(orderId, Order::markAsPaid);
     }
 
     public Order cancelOrder(String orderId) {
-        Order order = getOrderById(orderId);
+        return change(orderId, Order::cancel);
+    }
+
+    private Order change(String orderId, Consumer<Order> command) {
+        Order order = load(orderId);
         try {
-            order.cancel();
+            command.accept(order);
         } catch (IllegalStateException ex) {
             throw new InvalidOrderOperationException(ex.getMessage(), ex);
         }
         return orderRepository.save(order);
     }
 
-    public record OrderItemCommand(String productId, String productName, double unitPrice,
-                                   String currency, int quantity) {
+    private Order load(String orderId) {
+        OrderId id;
+        try {
+            id = new OrderId(orderId);
+        } catch (IllegalArgumentException ex) {
+            throw new OrderNotFoundException(orderId);
+        }
+        return orderRepository.findById(id).orElseThrow(() -> new OrderNotFoundException(orderId));
+    }
+
+    public record PlaceOrderCommand(String customerId, AddressCommand shippingAddress, List<OrderLineCommand> lines) {
+    }
+
+    public record OrderLineCommand(String sku, BigDecimal unitPrice, String currency, int quantity) {
+    }
+
+    public record AddressCommand(String street, String city, String postalCode, String countryCode) {
+
+        ShippingAddress toDomain() {
+            return new ShippingAddress(street, city, postalCode, countryCode);
+        }
     }
 }
