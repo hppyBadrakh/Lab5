@@ -17,14 +17,19 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 /**
  * Fitness functions for ADR-0006: the Order context is a hexagon.
  * <pre>
- *   adapter.in.web / adapter.in.event --> domain.port.in  --> application --> domain.model / domain.event
- *                                                                          --> domain.port.out <-- adapter.out.*
+ *   presentation.rest --> domain.port.in --> application --> domain.model / domain.event
+ *                                                         --> domain.port.out <-- infrastructure.adapter.out.*
+ *   infrastructure.messaging (side-channel) --> domain.event
  * </pre>
+ * Since ADR-0007 the driving REST adapter lives in {@code presentation.rest} and the event listener in
+ * {@code infrastructure.messaging}; the hexagon rules are unchanged.
  */
 @AnalyzeClasses(packages = "com.ecommerce.order", importOptions = ImportOption.DoNotIncludeTests.class)
 class HexagonalArchitectureFitnessTest {
 
     private static final String DOMAIN = "com.ecommerce.order.domain..";
+    private static final String[] DRIVING_ADAPTERS = {
+            "com.ecommerce.order.presentation.rest..", "com.ecommerce.order.infrastructure.messaging.."};
 
     /** The rule from the lab handout: no infrastructure, Spring or JPA in the domain. */
     @ArchTest
@@ -44,8 +49,8 @@ class HexagonalArchitectureFitnessTest {
             .domainModels("com.ecommerce.order.domain.model..", "com.ecommerce.order.domain.event..")
             .domainServices("com.ecommerce.order.domain.port..")
             .applicationServices("com.ecommerce.order.application..")
-            .adapter("web", "com.ecommerce.order.infrastructure.adapter.in.web..")
-            .adapter("event-listener", "com.ecommerce.order.infrastructure.adapter.in.event..")
+            .adapter("rest", "com.ecommerce.order.presentation.rest..")
+            .adapter("side-channel", "com.ecommerce.order.infrastructure.messaging..")
             .adapter("persistence", "com.ecommerce.order.infrastructure.adapter.out.persistence..")
             .adapter("event-publisher", "com.ecommerce.order.infrastructure.adapter.out.event..")
             .adapter("export", "com.ecommerce.order.export..");
@@ -69,12 +74,12 @@ class HexagonalArchitectureFitnessTest {
 
     @ArchTest
     static final ArchRule drivingAdaptersUseTheInboundPortNotTheImplementation = noClasses()
-            .that().resideInAPackage("com.ecommerce.order.infrastructure.adapter.in..")
+            .that().resideInAnyPackage(DRIVING_ADAPTERS)
             .should().dependOnClassesThat().areAssignableTo(OrderApplicationService.class);
 
     @ArchTest
     static final ArchRule drivingAdaptersNeverReachOutboundPorts = noClasses()
-            .that().resideInAPackage("com.ecommerce.order.infrastructure.adapter.in..")
+            .that().resideInAnyPackage(DRIVING_ADAPTERS)
             .should().dependOnClassesThat().resideInAPackage("com.ecommerce.order.domain.port.out..");
 
     @ArchTest

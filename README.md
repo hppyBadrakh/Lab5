@@ -1,9 +1,9 @@
 # E-Commerce Order Subsystem
 
-ICSI304 coursework. The order subsystem in `com.ecommerce.order` is a Spring Boot application built as a DDD hexagon (Week 9). The Week 5 structural pattern code remains in `mn.edu.num.sad.ecommerce`.
+ICSI304 coursework. The order subsystem in `com.ecommerce.order` is the Order Service: a Spring Boot application built as a DDD hexagon (Week 9) and extracted as the first distributed slice with a published REST contract and an asynchronous event side-channel (Week 10). The Week 5 structural pattern code remains in `mn.edu.num.sad.ecommerce` and stands for the rest of the monolith.
 
 ## Requirements
-- JDK 21 (`JAVA_HOME` must point at it)
+- JDK 25 LTS (`JAVA_HOME` must point at it)
 - No Maven install needed: use the wrapper
 
 ## Build and test
@@ -14,10 +14,16 @@ On Linux, macOS, or Git Bash, use `./mvnw clean verify`.
 
 The build compiles with `-Xlint:all` and fails on any compiler warning.
 
-Run only the pure domain tests (no Spring context) or only the architecture rules:
+Run only the pure domain tests (no Spring context), only the REST contract tests, or only the architecture rules:
 ```bash
 ./mvnw test "-Dtest=*DomainTest,*AggregateTest,*ValueObjectTest"
-./mvnw test -Dtest=HexagonalArchitectureFitnessTest
+./mvnw test "-Dtest=*ContractTest"
+./mvnw test "-Dtest=*ArchitectureFitnessTest"
+```
+
+`OpenApiSnapshotContractTest` compares the live OpenAPI document with `docs/openapi/rest-endpoints.json`. After an intended API change, refresh the snapshot and commit it:
+```bash
+./mvnw test -Dtest=OpenApiSnapshotContractTest "-Dopenapi.snapshot.update=true"
 ```
 
 ## Run
@@ -27,12 +33,13 @@ Run only the pure domain tests (no Spring context) or only the architecture rule
 
 | URL | Purpose |
 |---|---|
-| `POST /api/v1/orders` | Place an order (201 + `Location`, status `PLACED`) |
-| `GET /api/v1/orders/{id}` | Read an order (200, or 404) |
-| `POST /api/v1/orders/{id}/pay` | Mark a placed order as paid (200, or 409) |
-| `POST /api/v1/orders/{id}/cancel` | Cancel an order (200, or 409 if the state forbids it) |
+| `POST /api/v1/orders` | Place an order (201 + `Location`, status `PLACED`; 400) |
+| `GET /api/v1/orders/{orderId}` | Read an order (200, or 404) |
+| `GET /api/v1/customers/{customerId}/orders` | List a customer's orders, newest first (200, possibly empty) |
+| `PUT /api/v1/orders/{orderId}/payment` | Mark a placed order as paid (204, or 404, 409) |
+| `PUT /api/v1/orders/{orderId}/cancellation` | Cancel an order (204, or 404, 409 if already cancelled) |
 | http://localhost:8080/swagger-ui.html | Swagger UI |
-| http://localhost:8080/v3/api-docs | OpenAPI document |
+| http://localhost:8080/v3/api-docs | OpenAPI document (snapshot: `docs/openapi/rest-endpoints.json`) |
 
 Example request body:
 ```json
@@ -45,19 +52,22 @@ Example request body:
 
 Errors are RFC 7807 `ProblemDetail` responses. Orders live in memory, so they disappear when the application stops.
 
+After an order is placed, the audit entry and the customer confirmation run on a separate `side-channel-*` thread pool. The `201` does not wait for them and cannot be failed by them.
+
 ## Demo
 ```bash
 bash scripts/demo.sh
 ```
-This builds the jar if needed, starts the application, walks through the 201, 200, 404, 400, 400 (over the 10,000 limit), 200 (pay), 200 (cancel) and 409 cases with `curl`, and stops the application. If something already answers on `BASE_URL` (default `http://localhost:8080`), the script uses that instead.
+This builds the jar if needed, starts the application, walks through the 201, 200, 200 (customer order list), 404, 400, 400 (over the 10,000 limit), 204 (payment), 204 (cancellation) and 409 cases with `curl`, checks the Swagger UI, prints the side-channel log lines, and stops the application. If something already answers on `BASE_URL` (default `http://localhost:8080`), the script uses that instead.
 
 ## Architecture
 ```text
- adapter.in.web ──┐                                      ┌── adapter.out.persistence
- adapter.in.event ┴─> domain.port.in ─> application ─> domain.port.out <─┴── adapter.out.event
-                                              │
-                                              v
-                                 domain.model + domain.event   (pure Java 21)
+ presentation.rest ─> domain.port.in ─> application ─> domain.port.out <─┬── adapter.out.persistence
+                                              │                          └── adapter.out.event
+                                              v                                    │
+                                 domain.model + domain.event                       │ OrderPlaced (async)
+                                       (pure Java 25)                              v
+                                                                       infrastructure.messaging
 ```
 | Package | Contents |
 |---|---|
@@ -66,13 +76,24 @@ This builds the jar if needed, starts the application, walks through the 201, 20
 | `domain.port.in` | `ManageOrdersUseCase` (inbound port) |
 | `domain.port.out` | `OrderRepository`, `DomainEventPublisher` (outbound ports) |
 | `application` | `OrderApplicationService` (implements the inbound port) and application exceptions |
-| `infrastructure.adapter.in.web` | REST controller, DTOs, `GlobalExceptionHandler` |
-| `infrastructure.adapter.in.event` | `OrderAuditEventListener` |
+| `presentation.rest` | `OrderRestController`, `GlobalRestExceptionHandler` (RFC 7807), `OpenApiConfiguration` |
+| `presentation.rest.dto` | Request and response records with Bean Validation and `@Schema` |
+| `infrastructure.messaging` | Asynchronous side-channel: `OrderAuditAndNotificationSideChannelListener`, its thread pool, `OrderNotificationSender` |
 | `infrastructure.adapter.out.persistence` | `InMemoryOrderRepository` |
 | `infrastructure.adapter.out.event` | `SpringDomainEventPublisher` |
 | `export` | Bonus Pipe-and-Filter CSV pipeline (depends on the domain only) |
 
-`HexagonalArchitectureFitnessTest` enforces these rules with ArchUnit. See [docs/contexts.md](docs/contexts.md) for the context map and ubiquitous language, and [ADR-0006](docs/adr/0006-hexagonal-ports-adapters.md) for the decision.
+`HexagonalArchitectureFitnessTest` and `DistributedSliceArchitectureFitnessTest` enforce these rules with ArchUnit.
+
+## Documents
+| Document | Contents |
+|---|---|
+| [docs/contexts.md](docs/contexts.md) | Context map and ubiquitous language |
+| [docs/service-decomposition.md](docs/service-decomposition.md) | Monolith split into five services, database-per-service, sync versus async |
+| [ADR-0006](docs/adr/0006-hexagonal-ports-adapters.md) | Hexagonal ports and adapters |
+| [ADR-0007](docs/adr/0007-monolith-to-distributed-slice.md) | Order Service as a distributed slice, and the service we did not extract |
+| [docs/m2-milestone-close.md](docs/m2-milestone-close.md) | Milestone 2 technical close with the C4 container view |
+| [docs/api-gateway.md](docs/api-gateway.md) | API gateway sketch (bonus) |
 
 `legacy/LegacyOrderEndpoint.java` is the "before" code. It sits outside `src/` and is not compiled.
 
@@ -82,3 +103,5 @@ This builds the jar if needed, starts the application, walks through the 201, 20
 - `m6-styles`: Week 7 integration branch
 - `m6-ddd`: Week 9 integration branch and pull request target
 - `feature/ddd-bootstrap`: Week 9 work (DDD and hexagonal architecture)
+- `m7-distributed`: Week 10 integration branch and pull request target
+- `feature/distributed-slice`: Week 10 work (distributed slice, REST contract, OpenAPI, side-channel)

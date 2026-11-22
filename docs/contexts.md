@@ -22,7 +22,7 @@ Strategic design for the e-commerce order subsystem (Week 9, `m6-ddd`).
 |                                                                                    |
 |  - Order aggregate root guards line items, the order total and the lifecycle.     |
 |  - Publishes domain events: OrderPlaced, OrderCancelled.                           |
-|  - Domain core is pure Java 21: no Spring, Jakarta or persistence types.           |
+|  - Domain core is pure Java 25: no Spring, Jakarta or persistence types.           |
 |  - Talks to the outside only through ports (domain.port.in / domain.port.out).     |
 +------------------------------------------------------------------------------------+
 ```

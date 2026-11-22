@@ -17,6 +17,9 @@ public interface ManageOrdersUseCase {
 
     Order getOrder(String orderId);
 
+    /** Every order of one customer, newest first. An unknown customer simply has no orders. */
+    List<Order> listOrdersForCustomer(String customerId);
+
     Order payOrder(String orderId);
 
     Order cancelOrder(String orderId);
