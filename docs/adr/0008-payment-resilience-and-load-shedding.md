@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-23). Change to Accepted once a peer has approved the pull request.
+Accepted (2026-11-23). Solo project: there is no separate peer reviewer, so the author accepted it when the pull request was merged.
 
 Builds on [ADR-0006](0006-hexagonal-ports-adapters.md) (the hexagon) and [ADR-0007](0007-monolith-to-distributed-slice.md) (the Order Service slice).
 

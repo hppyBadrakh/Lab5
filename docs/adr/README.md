@@ -5,6 +5,6 @@ Nygard format: Title, Status, Context, Decision, Consequences. Titles are at mos
 | ADR | Title | Status |
 |---|---|---|
 | [0005](0005-layered-mvc-for-orders.md) | Layered MVC for Orders | Superseded by ADR-0006 |
-| [0006](0006-hexagonal-ports-adapters.md) | Hexagonal Ports and Adapters | Proposed |
-| [0007](0007-monolith-to-distributed-slice.md) | Monolith to Distributed Slice | Proposed |
-| [0008](0008-payment-resilience-and-load-shedding.md) | Payment Resilience and Load Shedding | Proposed |
+| [0006](0006-hexagonal-ports-adapters.md) | Hexagonal Ports and Adapters | Accepted |
+| [0007](0007-monolith-to-distributed-slice.md) | Monolith to Distributed Slice | Accepted |
+| [0008](0008-payment-resilience-and-load-shedding.md) | Payment Resilience and Load Shedding | Accepted |

@@ -57,5 +57,4 @@ git checkout feature/distributed-slice && git push -u origin feature/distributed
 ### 10. Pull request, checks and approval (10%)
 - **a. PR page:** title `[W10] distributed-slice`, base `m7-distributed`, head `feature/distributed-slice`, description from `docs/PR_DESCRIPTION_W10.md` including the 4 reflection sentences.
 - **b. Checks tab:** Build, Pure domain tests, REST contract tests, Architecture fitness and Full verify, all green.
-- **c. Approval:** a peer's "Approved" entry. Only a second GitHub account can approve.
-- **After approval:** change the Status of ADR-0007 (and ADR-0006) to `Accepted (approved by <reviewer> on <date>)`, tick the two open boxes in `docs/m2-milestone-close.md`, then commit and push.
+- **c. Merge:** solo project, so there is no peer approval. Screenshot the "merged" entry instead. ADR-0006 and ADR-0007 are Accepted, and the M2 checklist in `docs/m2-milestone-close.md` is complete.

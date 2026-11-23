@@ -58,5 +58,4 @@ Run these from a **Git Bash** terminal in the project folder. In PowerShell, `ba
 ### 9. Pull request
 - **a. PR page:** the title `[W11] quality-scenarios - ...`, base `m7-quality`, and the description with the 4 reflections.
 - **b. Checks:** Build, Pure domain tests, Resilience and contract tests, Architecture fitness, Full verify, all green.
-- **c. Approval:** a peer's "Approved". This needs a second GitHub account.
-- **After approval:** set the ADR-0008 Status to `Accepted (approved by <reviewer> on <date>)`, then commit and push.
+- **c. Merge:** solo project, so there is no peer approval. Screenshot the "merged" entry instead. ADR-0008 is Accepted.
