@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-08). Change to Accepted once a peer has approved the pull request.
+Accepted (2026-11-23). Proposed 2026-11-08. Solo project: there is no separate peer reviewer, so the author accepted it when the pull request was merged.
 
 Supersedes [ADR-0005](0005-layered-mvc-for-orders.md) for the Order Processing context.
 

@@ -4,11 +4,13 @@ import com.ecommerce.order.domain.model.CustomerId;
 import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderId;
+import com.ecommerce.order.domain.model.PaymentResult;
 import com.ecommerce.order.domain.model.Quantity;
 import com.ecommerce.order.domain.model.Sku;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
 import com.ecommerce.order.domain.port.out.DomainEventPublisher;
 import com.ecommerce.order.domain.port.out.OrderRepository;
+import com.ecommerce.order.domain.port.out.PaymentPort;
 import org.springframework.stereotype.Service;
 
 import java.util.Currency;
@@ -26,10 +28,13 @@ public class OrderApplicationService implements ManageOrdersUseCase {
 
     private final OrderRepository orderRepository;
     private final DomainEventPublisher eventPublisher;
+    private final PaymentPort paymentPort;
 
-    public OrderApplicationService(OrderRepository orderRepository, DomainEventPublisher eventPublisher) {
+    public OrderApplicationService(OrderRepository orderRepository, DomainEventPublisher eventPublisher,
+                                   PaymentPort paymentPort) {
         this.orderRepository = Objects.requireNonNull(orderRepository);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
+        this.paymentPort = Objects.requireNonNull(paymentPort);
     }
 
     @Override
@@ -73,9 +78,30 @@ public class OrderApplicationService implements ManageOrdersUseCase {
         return orderRepository.findByCustomerId(id);
     }
 
+    /**
+     * The payability check runs before the gateway is called, so a cancelled or paid order is never charged.
+     * How the gateway call is protected (circuit breaker, deferral) is decided by the PaymentPort adapter.
+     */
     @Override
-    public Order payOrder(String orderId) {
-        return change(orderId, Order::markAsPaid);
+    public PaymentReceipt payOrder(String orderId) {
+        Order order = load(orderId);
+        try {
+            order.assertPayable();
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderOperationException(ex.getMessage(), ex);
+        }
+        PaymentResult payment = paymentPort.processPayment(order.getId(), order.calculateTotal());
+        try {
+            switch (payment.status()) {
+                case SUCCESS -> order.markAsPaid();
+                case DEFERRED_PENDING -> order.markPaymentDeferred();
+                case DECLINED -> throw new PaymentDeclinedException(
+                        "Payment for order " + orderId + " was declined: " + payment.message());
+            }
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderOperationException(ex.getMessage(), ex);
+        }
+        return new PaymentReceipt(saveAndPublish(order), payment);
     }
 
     @Override

@@ -50,12 +50,36 @@
             "type" : "string"
           },
           "status" : {
-            "enum" : [ "DRAFT", "PLACED", "PAID", "CANCELLED" ],
+            "enum" : [ "DRAFT", "PLACED", "PAYMENT_PENDING", "PAID", "CANCELLED" ],
             "type" : "string"
           },
           "total" : {
             "example" : 51.0,
             "type" : "number"
+          }
+        },
+        "type" : "object"
+      },
+      "DeferredPaymentResponse" : {
+        "description" : "The payment gateway is unavailable. The payment intent was accepted and will be settled later.",
+        "properties" : {
+          "message" : {
+            "example" : "Payment gateway temporarily unavailable. Payment queued for background settlement.",
+            "type" : "string"
+          },
+          "orderId" : {
+            "example" : "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d",
+            "type" : "string"
+          },
+          "paymentReference" : {
+            "description" : "Token of the queued payment intent",
+            "example" : "DEFERRED-5d0c7c8e-2f6b-4c3a-9d1e-8a7b6c5d4e3f",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "DRAFT", "PLACED", "PAYMENT_PENDING", "PAID", "CANCELLED" ],
+            "example" : "PAYMENT_PENDING",
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -156,7 +180,7 @@
           },
           "status" : {
             "description" : "Lifecycle state: PLACED -> PAID, and CANCELLED from either",
-            "enum" : [ "DRAFT", "PLACED", "PAID", "CANCELLED" ],
+            "enum" : [ "DRAFT", "PLACED", "PAYMENT_PENDING", "PAID", "CANCELLED" ],
             "type" : "string"
           },
           "total" : {
@@ -323,6 +347,25 @@
               }
             },
             "description" : "Validation failed, or the order breaks a business rule (mixed currencies, total above 10,000)"
+          },
+          "429" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "Checkout capacity exceeded (rate limiter). Retry after the number of seconds in the Retry-After header",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait",
+                "schema" : {
+                  "type" : "integer"
+                },
+                "style" : "simple"
+              }
+            }
           }
         },
         "summary" : "Place a new order",
@@ -412,6 +455,7 @@
     },
     "/api/v1/orders/{orderId}/payment" : {
       "put" : {
+        "description" : "Charges the order total. If the payment gateway is slow or down, the circuit breaker answers at once: the payment intent is queued and the order becomes PAYMENT_PENDING (202). Calling this again for a PAYMENT_PENDING order retries the charge.",
         "operationId" : "payOrder",
         "parameters" : [ {
           "description" : "Order id",
@@ -424,8 +468,28 @@
           }
         } ],
         "responses" : {
+          "202" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeferredPaymentResponse"
+                }
+              }
+            },
+            "description" : "Gateway unavailable. Payment deferred, order is PAYMENT_PENDING"
+          },
           "204" : {
-            "description" : "Order is now PAID"
+            "description" : "Gateway charged the order. Order is now PAID"
+          },
+          "402" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The gateway declined the charge. The order stays payable"
           },
           "404" : {
             "content" : {
@@ -448,7 +512,7 @@
             "description" : "The order is not in a state that can be paid"
           }
         },
-        "summary" : "Record that a placed order was paid",
+        "summary" : "Pay a placed order through the payment gateway",
         "tags" : [ "Orders" ]
       }
     }

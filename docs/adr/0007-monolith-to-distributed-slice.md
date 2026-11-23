@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-22). Change to Accepted once a peer has approved the pull request.
+Accepted (2026-11-23). Proposed 2026-11-22. Solo project: there is no separate peer reviewer, so the author accepted it when the pull request was merged.
 
 Builds on [ADR-0006](0006-hexagonal-ports-adapters.md). It does not supersede it: the hexagon stays, and this ADR decides where the hexagon's process boundary is.
 

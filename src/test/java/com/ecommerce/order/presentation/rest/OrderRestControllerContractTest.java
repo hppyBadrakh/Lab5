@@ -3,8 +3,13 @@ package com.ecommerce.order.presentation.rest;
 import com.ecommerce.order.application.InvalidOrderOperationException;
 import com.ecommerce.order.application.InvalidOrderRequestException;
 import com.ecommerce.order.application.OrderNotFoundException;
+import com.ecommerce.order.application.PaymentDeclinedException;
+import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.model.OrderStatus;
+import com.ecommerce.order.domain.model.PaymentResult;
+import com.ecommerce.order.domain.model.PaymentResult.PaymentStatus;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PaymentReceipt;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Contract of the REST adapter in isolation: status codes, headers and body shapes
  * for 201, 200, 204, 400, 404, 405, 409 and 500. The use case is mocked.
  */
-@WebMvcTest(OrderRestController.class)
+// The checkout rate limiter is a servlet filter outside this controller slice; it has its own test.
+@WebMvcTest(controllers = OrderRestController.class, properties = "checkout.rate-limit.enabled=false")
 class OrderRestControllerContractTest {
 
     private static final String ADDRESS = """
@@ -117,13 +123,43 @@ class OrderRestControllerContractTest {
     @Test
     @DisplayName("PUT /api/v1/orders/{orderId}/payment - 204 No Content with an empty body")
     void shouldReturn204WhenPaid() throws Exception {
-        given(orderService.payOrder("ORD-1")).willReturn(order("ORD-1", OrderStatus.PAID));
+        given(orderService.payOrder("ORD-1")).willReturn(receipt(order("ORD-1", OrderStatus.PAID), PaymentStatus.SUCCESS));
 
         mockMvc.perform(put("/api/v1/orders/ORD-1/payment"))
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
 
         verify(orderService).payOrder("ORD-1");
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/orders/{orderId}/payment - 202 Accepted with the queued intent when the gateway is down")
+    void shouldReturn202WhenPaymentDeferred() throws Exception {
+        Order pending = order("ORD-1", OrderStatus.PLACED);
+        pending.markPaymentDeferred();
+        given(orderService.payOrder("ORD-1")).willReturn(receipt(pending, PaymentStatus.DEFERRED_PENDING));
+
+        mockMvc.perform(put("/api/v1/orders/ORD-1/payment"))
+                .andExpect(status().isAccepted())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.orderId").value("ORD-1"))
+                .andExpect(jsonPath("$.status").value("PAYMENT_PENDING"))
+                .andExpect(jsonPath("$.paymentReference").value("REF-DEFERRED_PENDING"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/orders/{orderId}/payment - 402 ProblemDetail when the gateway declines the charge")
+    void shouldReturn402WhenPaymentDeclined() throws Exception {
+        given(orderService.payOrder("ORD-1")).willThrow(new PaymentDeclinedException("Payment for order ORD-1 was declined"));
+
+        mockMvc.perform(put("/api/v1/orders/ORD-1/payment"))
+                .andExpect(status().isPaymentRequired())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Payment Declined"));
+    }
+
+    private static PaymentReceipt receipt(Order order, PaymentStatus status) {
+        return new PaymentReceipt(order, new PaymentResult("REF-" + status, order.getId(), status, status.name()));
     }
 
     @Test

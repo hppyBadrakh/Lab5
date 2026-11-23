@@ -20,6 +20,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
  *   presentation.rest --> domain.port.in --> application --> domain.model / domain.event
  *                                                         --> domain.port.out <-- infrastructure.adapter.out.*
  *   infrastructure.messaging (side-channel) --> domain.event
+ *   infrastructure.resilience (payment adapter, rate limiter) --> domain.port.out.PaymentPort
  * </pre>
  * Since ADR-0007 the driving REST adapter lives in {@code presentation.rest} and the event listener in
  * {@code infrastructure.messaging}; the hexagon rules are unchanged.
@@ -53,6 +54,7 @@ class HexagonalArchitectureFitnessTest {
             .adapter("side-channel", "com.ecommerce.order.infrastructure.messaging..")
             .adapter("persistence", "com.ecommerce.order.infrastructure.adapter.out.persistence..")
             .adapter("event-publisher", "com.ecommerce.order.infrastructure.adapter.out.event..")
+            .adapter("resilience", "com.ecommerce.order.infrastructure.resilience..")
             .adapter("export", "com.ecommerce.order.export..");
 
     @ArchTest
