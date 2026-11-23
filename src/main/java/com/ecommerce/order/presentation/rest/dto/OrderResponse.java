@@ -1,24 +1,37 @@
-package com.ecommerce.order.infrastructure.adapter.in.web;
+package com.ecommerce.order.presentation.rest.dto;
 
 import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.Order;
-import com.ecommerce.order.domain.model.OrderItem;
 import com.ecommerce.order.domain.model.OrderStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
+@Schema(description = "Complete representation of an order resource")
 public record OrderResponse(
+        @Schema(description = "Server-generated order id", example = "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d")
         String orderId,
+
+        @Schema(example = "CUST-1")
         String customerId,
+
+        @Schema(description = "Lifecycle state: PLACED -> PAID, and CANCELLED from either")
         OrderStatus status,
-        List<Item> items,
+
+        List<OrderItemResponse> items,
+
+        @Schema(description = "Sum of all line subtotals", example = "51.00")
         BigDecimal total,
+
+        @Schema(description = "Three-letter ISO 4217 currency code of every amount in this order", example = "USD")
         String currency,
+
         ShippingAddressDto shippingAddress,
+
         Instant createdAt,
+
         Instant updatedAt
 ) {
 
@@ -28,19 +41,11 @@ public record OrderResponse(
                 order.getId().value(),
                 order.getCustomerId().value(),
                 order.getStatus(),
-                order.getItems().stream().map(Item::fromDomain).toList(),
+                order.getItems().stream().map(OrderItemResponse::fromDomain).toList(),
                 total.amount(),
                 total.currencyCode(),
                 ShippingAddressDto.fromDomain(order.getShippingAddress()),
                 order.getCreatedAt(),
                 order.getUpdatedAt());
-    }
-
-    public record Item(UUID lineId, String sku, BigDecimal unitPrice, int quantity, BigDecimal subtotal) {
-
-        static Item fromDomain(OrderItem item) {
-            return new Item(item.getLineId(), item.getSku().value(), item.getUnitPrice().amount(),
-                    item.getQuantity().value(), item.calculateSubtotal().amount());
-        }
     }
 }

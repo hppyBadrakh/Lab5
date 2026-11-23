@@ -12,6 +12,7 @@ import com.ecommerce.order.domain.port.out.OrderRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.Currency;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -59,6 +60,17 @@ public class OrderApplicationService implements ManageOrdersUseCase {
     @Override
     public Order getOrder(String orderId) {
         return load(orderId);
+    }
+
+    @Override
+    public List<Order> listOrdersForCustomer(String customerId) {
+        CustomerId id;
+        try {
+            id = new CustomerId(customerId);
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidOrderRequestException(ex.getMessage(), ex);
+        }
+        return orderRepository.findByCustomerId(id);
     }
 
     @Override

@@ -1,10 +1,10 @@
-package com.ecommerce.order.infrastructure.adapter.in.web;
+package com.ecommerce.order.presentation.rest;
 
 import com.ecommerce.order.application.InvalidOrderOperationException;
 import com.ecommerce.order.application.InvalidOrderRequestException;
-import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
 import com.ecommerce.order.application.OrderNotFoundException;
 import com.ecommerce.order.domain.model.OrderStatus;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,23 +13,32 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
+import java.util.List;
+
 import static com.ecommerce.order.OrderFixtures.order;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(OrderController.class)
-class OrderControllerWebMvcTest {
+/**
+ * Contract of the REST adapter in isolation: status codes, headers and body shapes
+ * for 201, 200, 204, 400, 404, 405, 409 and 500. The use case is mocked.
+ */
+@WebMvcTest(OrderRestController.class)
+class OrderRestControllerContractTest {
 
     private static final String ADDRESS = """
             "shippingAddress":{"street":"Peace Ave 1","city":"Ulaanbaatar","postalCode":"14200","countryCode":"MN"}""";
@@ -53,6 +62,7 @@ class OrderControllerWebMvcTest {
         mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", endsWith("/api/v1/orders/ORD-1")))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.orderId").value("ORD-1"))
                 .andExpect(jsonPath("$.status").value("PLACED"))
                 .andExpect(jsonPath("$.total").value(200.00))
@@ -61,7 +71,7 @@ class OrderControllerWebMvcTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/orders/{id} - 200 OK with order body")
+    @DisplayName("GET /api/v1/orders/{orderId} - 200 OK with order body")
     void shouldReturn200WhenFound() throws Exception {
         given(orderService.getOrder("ORD-1")).willReturn(order("ORD-1", OrderStatus.PAID));
 
@@ -75,23 +85,57 @@ class OrderControllerWebMvcTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/pay - 200 OK")
-    void shouldReturn200WhenPaid() throws Exception {
-        given(orderService.payOrder("ORD-1")).willReturn(order("ORD-1", OrderStatus.PAID));
+    @DisplayName("GET /api/v1/customers/{customerId}/orders - 200 OK with order summaries")
+    void shouldReturn200WithCustomerOrders() throws Exception {
+        given(orderService.listOrdersForCustomer("CUST-1")).willReturn(List.of(
+                order("ORD-2", "CUST-1", "10.00", "USD", 3, OrderStatus.PAID, Instant.parse("2026-11-02T00:00:00Z")),
+                order("ORD-1", OrderStatus.PLACED)));
 
-        mockMvc.perform(post("/api/v1/orders/ORD-1/pay"))
+        mockMvc.perform(get("/api/v1/customers/CUST-1/orders"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PAID"));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].orderId").value("ORD-2"))
+                .andExpect(jsonPath("$[0].status").value("PAID"))
+                .andExpect(jsonPath("$[0].total").value(30.00))
+                .andExpect(jsonPath("$[0].currency").value("USD"))
+                .andExpect(jsonPath("$[0].itemCount").value(1))
+                .andExpect(jsonPath("$[0].createdAt").value("2026-11-02T00:00:00Z"))
+                .andExpect(jsonPath("$[0].items").doesNotExist())
+                .andExpect(jsonPath("$[1].orderId").value("ORD-1"));
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/cancel - 200 OK")
-    void shouldReturn200WhenCancelled() throws Exception {
+    @DisplayName("GET /api/v1/customers/{customerId}/orders - 200 OK with an empty list for a customer without orders")
+    void shouldReturn200WithEmptyListForCustomerWithoutOrders() throws Exception {
+        given(orderService.listOrdersForCustomer("CUST-NEW")).willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/customers/CUST-NEW/orders"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/orders/{orderId}/payment - 204 No Content with an empty body")
+    void shouldReturn204WhenPaid() throws Exception {
+        given(orderService.payOrder("ORD-1")).willReturn(order("ORD-1", OrderStatus.PAID));
+
+        mockMvc.perform(put("/api/v1/orders/ORD-1/payment"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(orderService).payOrder("ORD-1");
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/orders/{orderId}/cancellation - 204 No Content with an empty body")
+    void shouldReturn204WhenCancelled() throws Exception {
         given(orderService.cancelOrder("ORD-1")).willReturn(order("ORD-1", OrderStatus.CANCELLED));
 
-        mockMvc.perform(post("/api/v1/orders/ORD-1/cancel"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mockMvc.perform(put("/api/v1/orders/ORD-1/cancellation"))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(orderService).cancelOrder("ORD-1");
     }
 
     @Test
@@ -106,6 +150,7 @@ class OrderControllerWebMvcTest {
         mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Bad Request"))
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detail").value("Validation failed"))
                 .andExpect(jsonPath("$.invalidFields.customerId").exists())
@@ -157,24 +202,43 @@ class OrderControllerWebMvcTest {
 
         mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Business Rule Violation"))
                 .andExpect(jsonPath("$.detail").value(containsString("would exceed the limit")));
     }
 
     @Test
-    @DisplayName("GET /api/v1/orders/{id} - 404 ProblemDetail")
+    @DisplayName("POST /api/v1/orders - 415 ProblemDetail for a non-JSON body")
+    void shouldReturn415ForNonJsonBody() throws Exception {
+        mockMvc.perform(post("/api/v1/orders").contentType(MediaType.TEXT_PLAIN).content("hello"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{orderId} - 404 ProblemDetail")
     void shouldReturn404WhenNotFound() throws Exception {
         given(orderService.getOrder("UNKNOWN")).willThrow(new OrderNotFoundException("UNKNOWN"));
 
         mockMvc.perform(get("/api/v1/orders/UNKNOWN"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.title").value("Not Found"))
+                .andExpect(jsonPath("$.title").value("Order Not Found"))
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.detail").value("Order not found: UNKNOWN"));
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/orders/{id} - 405 ProblemDetail, not 500")
+    @DisplayName("PUT /api/v1/orders/{orderId}/cancellation - 404 ProblemDetail for an unknown order")
+    void shouldReturn404WhenCancellingUnknownOrder() throws Exception {
+        given(orderService.cancelOrder("UNKNOWN")).willThrow(new OrderNotFoundException("UNKNOWN"));
+
+        mockMvc.perform(put("/api/v1/orders/UNKNOWN/cancellation"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.title").value("Order Not Found"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/orders/{orderId} - 405 ProblemDetail, not 500")
     void shouldReturn405ForUnsupportedMethod() throws Exception {
         mockMvc.perform(delete("/api/v1/orders/ORD-1"))
                 .andExpect(status().isMethodNotAllowed())
@@ -182,20 +246,33 @@ class OrderControllerWebMvcTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/pay - 409 ProblemDetail on illegal transition")
-    void shouldReturn409OnConflict() throws Exception {
+    @DisplayName("PUT /api/v1/orders/{orderId}/cancellation - 409 ProblemDetail when already cancelled")
+    void shouldReturn409WhenAlreadyCancelled() throws Exception {
+        given(orderService.cancelOrder("ORD-CANCELLED"))
+                .willThrow(new InvalidOrderOperationException("Illegal state transition from CANCELLED to CANCELLED"));
+
+        mockMvc.perform(put("/api/v1/orders/ORD-CANCELLED/cancellation"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("State Transition Conflict"))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("Illegal state transition from CANCELLED to CANCELLED"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/orders/{orderId}/payment - 409 ProblemDetail on illegal transition")
+    void shouldReturn409WhenPayingCancelledOrder() throws Exception {
         given(orderService.payOrder("ORD-CANCELLED"))
                 .willThrow(new InvalidOrderOperationException("Illegal state transition from CANCELLED to PAID"));
 
-        mockMvc.perform(post("/api/v1/orders/ORD-CANCELLED/pay"))
+        mockMvc.perform(put("/api/v1/orders/ORD-CANCELLED/payment"))
                 .andExpect(status().isConflict())
-                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.title").value("State Transition Conflict"))
                 .andExpect(jsonPath("$.detail").value("Illegal state transition from CANCELLED to PAID"));
     }
 
     @Test
-    @DisplayName("GET /api/v1/orders/{id} - 500 ProblemDetail that leaks no internals")
+    @DisplayName("GET /api/v1/orders/{orderId} - 500 ProblemDetail that leaks no internals")
     void shouldReturn500WithoutLeakingDetails() throws Exception {
         given(orderService.getOrder("BOOM"))
                 .willThrow(new IllegalStateException("jdbc:h2:mem:test password=secret"));

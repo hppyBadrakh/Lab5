@@ -107,6 +107,18 @@ class OrderApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("listOrdersForCustomer returns only that customer's orders and rejects a malformed id")
+    void shouldListOrdersForCustomer() {
+        Order mine = placed();
+        service.placeOrder(command("CUST-2", List.of(USD_LINE)));
+
+        assertThat(service.listOrdersForCustomer("CUST-1")).containsExactly(mine);
+        assertThat(service.listOrdersForCustomer("CUST-NOBODY")).isEmpty();
+        assertThatThrownBy(() -> service.listOrdersForCustomer("X".repeat(65)))
+                .isInstanceOf(InvalidOrderRequestException.class);
+    }
+
+    @Test
     @DisplayName("payOrder and cancelOrder change the stored aggregate")
     void shouldPayThenCancel() {
         Order order = placed();

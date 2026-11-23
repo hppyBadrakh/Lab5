@@ -34,7 +34,7 @@ We adopt **Hexagonal Architecture (Ports and Adapters)** for the Order Processin
 
 Rules:
 
-- **The domain core is pure Java 21.** It depends only on `java..` and itself: no Spring, Jakarta, ORM or library types.
+- **The domain core is pure Java 25.** It depends only on `java..` and itself: no Spring, Jakarta, ORM or library types.
 - **The aggregate is the consistency boundary.** `Order` enforces the 10,000 limit, currency uniformity, non-empty placement and the `DRAFT -> PLACED -> PAID / CANCELLED` lifecycle. A rejected command leaves it unchanged. `OrderItem` has no public constructor or mutator.
 - **Events are published after the save.** `Order` records events, and the application service calls `pullDomainEvents()` after `OrderRepository.save` succeeds. The publisher adapter isolates listener failures, so a side effect never fails or undoes the order change.
 - **Fitness functions.** `HexagonalArchitectureFitnessTest` (ArchUnit) fails the build if the domain imports a framework, if a dependency points outward (onion rule), if a driving adapter uses the service class or an outbound port directly, if an outbound adapter does not implement a domain port, or if a package cycle appears. CI runs it as its own stage.
