@@ -56,10 +56,12 @@ These terms mean exactly this inside the Order context, in code, tests, tickets 
 | **Quantity** | Value object | How many units of a SKU are ordered, from 1 to 999. |
 | **Money** | Value object | An immutable `BigDecimal` amount paired with an ISO-4217 `Currency`. It removes binary rounding errors and refuses to add different currencies. |
 | **ShippingAddress** | Value object | Where the order is delivered: street, city, postal code and country. |
-| **OrderStatus** | Value object (enum) | The lifecycle: `DRAFT -> PLACED -> PAID`, and `CANCELLED` from any non-final state. |
+| **OrderStatus** | Value object (enum) | The lifecycle: `DRAFT -> PLACED -> PAID`, with `PAYMENT_PENDING` between them when the payment was deferred, and `CANCELLED` from any non-final state. |
 | **Draft** | Status | The customer is still building the order. Line items can be added only now. |
 | **Place** (an order) | Command | The customer commits to the order. Requires at least one line item. Emits `OrderPlaced`. |
-| **Pay** | Command | Payment for a placed order was confirmed. |
+| **Pay** | Command | Charge the order total through the payment gateway. Allowed from `PLACED` or `PAYMENT_PENDING`. |
+| **Payment pending** | Status | The gateway was unavailable, so the payment intent was stored to be settled later (ADR-0008). Paying again retries the charge. |
+| **Deferred payment** | Fallback result | The answer of the payment adapter when the gateway is down: the intent is kept, nothing was charged yet. |
 | **Cancel** | Command | The order is abandoned. Allowed from `DRAFT`, `PLACED` or `PAID`. Emits `OrderCancelled`. |
 | **Order total** | Derived value | The sum of every line subtotal (unit price x quantity). Never stored, always calculated. |
 | **Order limit** | Invariant | An order total may not exceed 10,000.00 in the order currency. |
@@ -73,8 +75,9 @@ These terms mean exactly this inside the Order context, in code, tests, tickets 
 2. Every line item uses the order currency.
 3. The order total never exceeds 10,000.00 (in the order currency). A rejected change leaves the order untouched.
 4. An order cannot be placed without line items.
-5. Status changes follow `DRAFT -> PLACED -> PAID`. `CANCELLED` is reachable from every non-final state, and `CANCELLED` is final.
+5. Status changes follow `DRAFT -> PLACED -> (PAYMENT_PENDING ->) PAID`. `CANCELLED` is reachable from every non-final state, and `CANCELLED` is final.
 6. Adding a SKU that is already on the order increases that line's quantity, and the merged quantity must still be within 1..999.
+7. Only a `PLACED` or `PAYMENT_PENDING` order is sent to the payment gateway; a cancelled or paid order is never charged.
 
 ### Terms that do *not* belong to this context
 
