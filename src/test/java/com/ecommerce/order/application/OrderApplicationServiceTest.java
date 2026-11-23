@@ -3,12 +3,18 @@ package com.ecommerce.order.application;
 import com.ecommerce.order.domain.event.DomainEvent;
 import com.ecommerce.order.domain.event.OrderCancelledDomainEvent;
 import com.ecommerce.order.domain.event.OrderPlacedDomainEvent;
+import com.ecommerce.order.domain.model.Money;
 import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.OrderId;
 import com.ecommerce.order.domain.model.OrderStatus;
+import com.ecommerce.order.domain.model.PaymentResult;
+import com.ecommerce.order.domain.model.PaymentResult.PaymentStatus;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.AddressCommand;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.OrderLineCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PaymentReceipt;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PlaceOrderCommand;
 import com.ecommerce.order.domain.port.out.DomainEventPublisher;
+import com.ecommerce.order.domain.port.out.PaymentPort;
 import com.ecommerce.order.infrastructure.adapter.out.persistence.InMemoryOrderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,7 +34,23 @@ class OrderApplicationServiceTest {
 
     private final InMemoryOrderRepository repository = new InMemoryOrderRepository();
     private final RecordingPublisher publisher = new RecordingPublisher();
-    private final OrderApplicationService service = new OrderApplicationService(repository, publisher);
+    private final ScriptedPaymentPort payments = new ScriptedPaymentPort();
+    private final OrderApplicationService service = new OrderApplicationService(repository, publisher, payments);
+
+    /** Answers every charge with the configured status and counts the calls. */
+    private static final class ScriptedPaymentPort implements PaymentPort {
+
+        private PaymentStatus nextStatus = PaymentStatus.SUCCESS;
+        private int calls;
+        private Money lastAmount;
+
+        @Override
+        public PaymentResult processPayment(OrderId orderId, Money amount) {
+            calls++;
+            lastAmount = amount;
+            return new PaymentResult("REF-" + calls, orderId, nextStatus, nextStatus.name());
+        }
+    }
 
     /** Records what was published and whether the order was already stored at that moment. */
     private final class RecordingPublisher implements DomainEventPublisher {
@@ -142,7 +164,50 @@ class OrderApplicationServiceTest {
                 .hasMessageContaining("CANCELLED");
         assertThatThrownBy(() -> service.payOrder(id))
                 .isInstanceOf(InvalidOrderOperationException.class)
-                .hasMessageContaining("CANCELLED to PAID");
+                .hasMessageContaining("cannot be paid when it is CANCELLED");
+        assertThat(payments.calls).as("a cancelled order is never sent to the gateway").isZero();
+    }
+
+    @Test
+    @DisplayName("payOrder charges the order total and marks the order PAID on success")
+    void shouldChargeTheOrderTotal() {
+        String id = placed().getId().value();
+
+        PaymentReceipt receipt = service.payOrder(id);
+
+        assertThat(receipt.deferred()).isFalse();
+        assertThat(receipt.order().getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(payments.lastAmount).isEqualTo(Money.of("51.00", "USD"));
+    }
+
+    @Test
+    @DisplayName("A deferred payment leaves the order PAYMENT_PENDING; paying again settles it")
+    void shouldDeferThenSettle() {
+        String id = placed().getId().value();
+        payments.nextStatus = PaymentStatus.DEFERRED_PENDING;
+
+        PaymentReceipt deferred = service.payOrder(id);
+        assertThat(deferred.deferred()).isTrue();
+        assertThat(service.getOrder(id).getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+
+        assertThat(service.payOrder(id).order().getStatus()).as("deferring twice is harmless")
+                .isEqualTo(OrderStatus.PAYMENT_PENDING);
+
+        payments.nextStatus = PaymentStatus.SUCCESS;
+        assertThat(service.payOrder(id).order().getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(payments.calls).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("A declined payment is reported (402) and the order stays PLACED")
+    void shouldReportDeclinedPayment() {
+        String id = placed().getId().value();
+        payments.nextStatus = PaymentStatus.DECLINED;
+
+        assertThatThrownBy(() -> service.payOrder(id))
+                .isInstanceOf(PaymentDeclinedException.class)
+                .hasMessageContaining("declined");
+        assertThat(service.getOrder(id).getStatus()).isEqualTo(OrderStatus.PLACED);
     }
 
     @Test

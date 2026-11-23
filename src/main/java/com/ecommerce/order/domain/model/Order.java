@@ -93,8 +93,29 @@ public class Order {
         domainEvents.add(new OrderPlacedDomainEvent(UUID.randomUUID(), id, customerId, calculateTotal(), updatedAt));
     }
 
+    /**
+     * Guard checked before money is moved: only a PLACED order, or one whose payment was deferred,
+     * may be sent to the payment gateway. Charging a cancelled or already paid order is never attempted.
+     */
+    public void assertPayable() {
+        if (status != OrderStatus.PLACED && status != OrderStatus.PAYMENT_PENDING) {
+            throw new IllegalStateException("Order cannot be paid when it is " + status);
+        }
+    }
+
     public void markAsPaid() {
         transitionTo(OrderStatus.PAID);
+    }
+
+    /**
+     * The payment gateway was unavailable and the payment intent was queued for later settlement.
+     * Deferring an order that is already PAYMENT_PENDING again keeps it unchanged.
+     */
+    public void markPaymentDeferred() {
+        if (status == OrderStatus.PAYMENT_PENDING) {
+            return;
+        }
+        transitionTo(OrderStatus.PAYMENT_PENDING);
     }
 
     public void cancel() {

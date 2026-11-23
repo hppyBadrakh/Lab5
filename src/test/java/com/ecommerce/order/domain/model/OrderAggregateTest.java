@@ -190,6 +190,38 @@ class OrderAggregateTest {
         }
 
         @Test
+        @DisplayName("PLACED -> PAYMENT_PENDING (gateway down) -> PAID; deferring twice changes nothing")
+        void shouldDeferPaymentThenSettle() {
+            order.placeOrder();
+            order.assertPayable();
+
+            order.markPaymentDeferred();
+            order.markPaymentDeferred();
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.PAYMENT_PENDING);
+            order.assertPayable();
+
+            order.markAsPaid();
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        }
+
+        @Test
+        @DisplayName("Only PLACED or PAYMENT_PENDING orders are payable")
+        void shouldGuardPayability() {
+            assertThatThrownBy(order::assertPayable)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("cannot be paid when it is DRAFT");
+            assertThatThrownBy(order::markPaymentDeferred).isInstanceOf(IllegalStateException.class);
+
+            order.placeOrder();
+            order.markAsPaid();
+            assertThatThrownBy(order::assertPayable).hasMessageContaining("PAID");
+
+            order.cancel();
+            assertThatThrownBy(order::assertPayable).hasMessageContaining("CANCELLED");
+            assertThatThrownBy(order::markPaymentDeferred).isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
         @DisplayName("Items cannot be added once the order is placed")
         void shouldRejectAddingAfterPlacing() {
             order.placeOrder();

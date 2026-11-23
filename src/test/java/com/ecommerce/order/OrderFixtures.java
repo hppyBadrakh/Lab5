@@ -32,6 +32,10 @@ public final class OrderFixtures {
         switch (status) {
             case DRAFT -> { }
             case PLACED -> order.placeOrder();
+            case PAYMENT_PENDING -> {
+                order.placeOrder();
+                order.markPaymentDeferred();
+            }
             case PAID -> {
                 order.placeOrder();
                 order.markAsPaid();

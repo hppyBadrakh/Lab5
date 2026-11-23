@@ -4,9 +4,11 @@ import com.ecommerce.order.domain.model.Order;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.AddressCommand;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.OrderLineCommand;
+import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PaymentReceipt;
 import com.ecommerce.order.domain.port.in.ManageOrdersUseCase.PlaceOrderCommand;
 import com.ecommerce.order.presentation.rest.dto.CreateOrderRequest;
 import com.ecommerce.order.presentation.rest.dto.CustomerOrderSummaryResponse;
+import com.ecommerce.order.presentation.rest.dto.DeferredPaymentResponse;
 import com.ecommerce.order.presentation.rest.dto.OrderResponse;
 import com.ecommerce.order.presentation.rest.dto.ShippingAddressDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,6 +62,10 @@ public class OrderRestController {
     @ApiResponse(responseCode = "400", description = "Validation failed, or the order breaks a business rule "
             + "(mixed currencies, total above 10,000)",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "429", description = "Checkout capacity exceeded (rate limiter). Retry after the "
+            + "number of seconds in the Retry-After header",
+            headers = @Header(name = "Retry-After", description = "Seconds to wait", schema = @Schema(type = "integer")),
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     public ResponseEntity<OrderResponse> placeOrder(@Valid @RequestBody CreateOrderRequest request) {
         Order order = orderService.placeOrder(toCommand(request));
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -97,16 +103,27 @@ public class OrderRestController {
     }
 
     @PutMapping("/orders/{orderId}/payment")
-    @Operation(summary = "Record that a placed order was paid")
-    @ApiResponse(responseCode = "204", description = "Order is now PAID", content = @Content)
+    @Operation(summary = "Pay a placed order through the payment gateway",
+            description = "Charges the order total. If the payment gateway is slow or down, the circuit breaker "
+                    + "answers at once: the payment intent is queued and the order becomes PAYMENT_PENDING (202). "
+                    + "Calling this again for a PAYMENT_PENDING order retries the charge.")
+    @ApiResponse(responseCode = "204", description = "Gateway charged the order. Order is now PAID", content = @Content)
+    @ApiResponse(responseCode = "202", description = "Gateway unavailable. Payment deferred, order is PAYMENT_PENDING",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = DeferredPaymentResponse.class)))
+    @ApiResponse(responseCode = "402", description = "The gateway declined the charge. The order stays payable",
+            content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "404", description = "No order has this id",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "The order is not in a state that can be paid",
             content = @Content(mediaType = PROBLEM_JSON, schema = @Schema(implementation = ProblemDetail.class)))
-    public ResponseEntity<Void> payOrder(
+    public ResponseEntity<DeferredPaymentResponse> payOrder(
             @Parameter(description = "Order id", example = "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d")
             @PathVariable String orderId) {
-        orderService.payOrder(orderId);
+        PaymentReceipt receipt = orderService.payOrder(orderId);
+        if (receipt.deferred()) {
+            return ResponseEntity.accepted().body(DeferredPaymentResponse.fromDomain(receipt));
+        }
         return ResponseEntity.noContent().build();
     }
 

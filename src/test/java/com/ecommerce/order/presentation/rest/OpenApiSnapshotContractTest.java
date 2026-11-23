@@ -75,10 +75,10 @@ class OpenApiSnapshotContractTest {
     @DisplayName("Every operation documents its status codes, and errors are problem+json")
     void shouldDocumentStatusCodes() {
         Map<String, List<String>> expected = Map.of(
-                "/api/v1/orders|post", List.of("201", "400"),
+                "/api/v1/orders|post", List.of("201", "400", "429"),
                 "/api/v1/orders/{orderId}|get", List.of("200", "404"),
                 "/api/v1/customers/{customerId}/orders|get", List.of("200", "400"),
-                "/api/v1/orders/{orderId}/payment|put", List.of("204", "404", "409"),
+                "/api/v1/orders/{orderId}/payment|put", List.of("202", "204", "402", "404", "409"),
                 "/api/v1/orders/{orderId}/cancellation|put", List.of("204", "404", "409"));
 
         expected.forEach((operation, codes) -> {
@@ -115,7 +115,7 @@ class OpenApiSnapshotContractTest {
                 .containsExactlyInAnyOrder("customerId", "shippingAddress", "items");
         assertThat(schemas.path("OrderResponse").path("properties").path("status").path("enum"))
                 .extracting(JsonNode::asText)
-                .containsExactly("DRAFT", "PLACED", "PAID", "CANCELLED");
+                .containsExactly("DRAFT", "PLACED", "PAYMENT_PENDING", "PAID", "CANCELLED");
     }
 
     @Test

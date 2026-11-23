@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [m6-styles, m6-ddd, m7-distributed]
+    branches: [m6-styles, m6-ddd, m7-distributed, m7-quality]
   push:
-    branches: [m6-styles, m6-ddd, m7-distributed]
+    branches: [m6-styles, m6-ddd, m7-distributed, m7-quality]
 
 permissions:
   contents: read
@@ -36,8 +36,8 @@ jobs:
       # Pure domain tests run without booting Spring.
       - run: ./mvnw -B test -Dtest='*DomainTest,*AggregateTest,*ValueObjectTest'
 
-  test-contract:
-    name: REST contract tests
+  test-mitigations:
+    name: Resilience and contract tests
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -47,8 +47,8 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      # MockMvc status, header and body checks, plus the OpenAPI snapshot drift check.
-      - run: ./mvnw -B test -Dtest='*ContractTest'
+      # Circuit breaker, bulkhead and rate limiter behaviour, MockMvc contracts and the OpenAPI snapshot drift check.
+      - run: ./mvnw -B test -Dtest='*Resilient*,*ContractTest'
 
   verify-architecture:
     name: Architecture fitness
@@ -61,12 +61,12 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      # ArchUnit: the hexagon rules (ADR-0006) and the distributed slice rules (ADR-0007).
+      # ArchUnit: hexagon (ADR-0006), distributed slice (ADR-0007) and resilience placement (ADR-0008).
       - run: ./mvnw -B test -Dtest='*ArchitectureFitnessTest'
 
   verify:
     name: Full verify
-    needs: [test-domain, test-contract, verify-architecture]
+    needs: [test-domain, test-mitigations, verify-architecture]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
