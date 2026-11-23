@@ -1,4 +1,4 @@
-package com.ecommerce.order.infrastructure.adapter.in.web;
+package com.ecommerce.order.presentation.rest;
 
 import com.ecommerce.order.application.InvalidOrderOperationException;
 import com.ecommerce.order.application.InvalidOrderRequestException;
@@ -18,25 +18,26 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
+ * Turns every error into an RFC 7807 / RFC 9457 {@code application/problem+json} body.
  * The base class keeps Spring MVC errors (malformed JSON, 405, 415) at their
  * own status codes; without it the catch-all below would turn them into 500s.
  */
 @RestControllerAdvice
-public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(OrderNotFoundException.class)
     public ProblemDetail handleNotFound(OrderNotFoundException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        return problem(HttpStatus.NOT_FOUND, "Order Not Found", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidOrderOperationException.class)
     public ProblemDetail handleConflict(InvalidOrderOperationException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        return problem(HttpStatus.CONFLICT, "State Transition Conflict", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidOrderRequestException.class)
     public ProblemDetail handleInvalidRequest(InvalidOrderRequestException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Business Rule Violation", ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
@@ -54,5 +55,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .forEach(error -> invalidFields.put(error.getField(), error.getDefaultMessage()));
         problem.setProperty("invalidFields", invalidFields);
         return handleExceptionInternal(ex, problem, headers, status, request);
+    }
+
+    private static ProblemDetail problem(HttpStatus status, String title, String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
+        return problem;
     }
 }

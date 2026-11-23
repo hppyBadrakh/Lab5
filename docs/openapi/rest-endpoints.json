@@ -1,0 +1,464 @@
+{
+  "components" : {
+    "schemas" : {
+      "CreateOrderRequest" : {
+        "description" : "Payload required to place a new customer order. The server assigns the order id and status.",
+        "properties" : {
+          "customerId" : {
+            "description" : "Id of the customer placing the order. The customer itself is owned by the Customer Service.",
+            "example" : "CUST-1",
+            "maxLength" : 64,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "items" : {
+            "description" : "Line items. At least one is required, and all must use the same currency.",
+            "items" : {
+              "$ref" : "#/components/schemas/OrderItemRequest"
+            },
+            "minItems" : 1,
+            "type" : "array"
+          },
+          "shippingAddress" : {
+            "$ref" : "#/components/schemas/ShippingAddress",
+            "description" : "Delivery address, copied into the order as a snapshot"
+          }
+        },
+        "required" : [ "customerId", "items", "shippingAddress" ],
+        "type" : "object"
+      },
+      "CustomerOrderSummaryResponse" : {
+        "description" : "Short view of an order for a customer's order history. Fetch the order itself for the lines.",
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "description" : "Three-letter ISO 4217 currency code",
+            "example" : "USD",
+            "type" : "string"
+          },
+          "itemCount" : {
+            "description" : "Number of distinct lines, not units",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "orderId" : {
+            "example" : "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "DRAFT", "PLACED", "PAID", "CANCELLED" ],
+            "type" : "string"
+          },
+          "total" : {
+            "example" : 51.0,
+            "type" : "number"
+          }
+        },
+        "type" : "object"
+      },
+      "OrderItemRequest" : {
+        "description" : "One line of a new order",
+        "properties" : {
+          "currency" : {
+            "description" : "Three-letter ISO 4217 currency code",
+            "example" : "USD",
+            "minLength" : 1,
+            "pattern" : "[A-Z]{3}",
+            "type" : "string"
+          },
+          "quantity" : {
+            "description" : "Number of units ordered",
+            "example" : 2,
+            "format" : "int32",
+            "maximum" : 999,
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "sku" : {
+            "description" : "Stock Keeping Unit in the form CATEGORY-CODE",
+            "example" : "ELEC-1001",
+            "minLength" : 1,
+            "pattern" : "[A-Z0-9]{3,12}-[A-Z0-9]{2,6}",
+            "type" : "string"
+          },
+          "unitPrice" : {
+            "description" : "Price of one unit, with at most 2 decimals",
+            "example" : 25.5,
+            "type" : "number"
+          }
+        },
+        "required" : [ "currency", "sku", "unitPrice" ],
+        "type" : "object"
+      },
+      "OrderItemResponse" : {
+        "description" : "One line of an order",
+        "properties" : {
+          "lineId" : {
+            "description" : "Identity of this line inside its order",
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "quantity" : {
+            "example" : 2,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "sku" : {
+            "example" : "ELEC-1001",
+            "type" : "string"
+          },
+          "subtotal" : {
+            "description" : "unitPrice x quantity",
+            "example" : 51.0,
+            "type" : "number"
+          },
+          "unitPrice" : {
+            "description" : "Price of one unit, as agreed at checkout",
+            "example" : 25.5,
+            "type" : "number"
+          }
+        },
+        "type" : "object"
+      },
+      "OrderResponse" : {
+        "description" : "Complete representation of an order resource",
+        "properties" : {
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "currency" : {
+            "description" : "Three-letter ISO 4217 currency code of every amount in this order",
+            "example" : "USD",
+            "type" : "string"
+          },
+          "customerId" : {
+            "example" : "CUST-1",
+            "type" : "string"
+          },
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/OrderItemResponse"
+            },
+            "type" : "array"
+          },
+          "orderId" : {
+            "description" : "Server-generated order id",
+            "example" : "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d",
+            "type" : "string"
+          },
+          "shippingAddress" : {
+            "$ref" : "#/components/schemas/ShippingAddress"
+          },
+          "status" : {
+            "description" : "Lifecycle state: PLACED -> PAID, and CANCELLED from either",
+            "enum" : [ "DRAFT", "PLACED", "PAID", "CANCELLED" ],
+            "type" : "string"
+          },
+          "total" : {
+            "description" : "Sum of all line subtotals",
+            "example" : 51.0,
+            "type" : "number"
+          },
+          "updatedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ProblemDetail" : {
+        "properties" : {
+          "detail" : {
+            "type" : [ "string", "null" ]
+          },
+          "instance" : {
+            "format" : "uri",
+            "type" : [ "string", "null" ]
+          },
+          "properties" : {
+            "additionalProperties" : { },
+            "type" : [ "object", "null" ]
+          },
+          "status" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : [ "string", "null" ]
+          },
+          "type" : {
+            "format" : "uri",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ShippingAddress" : {
+        "description" : "Where the order is delivered",
+        "properties" : {
+          "city" : {
+            "example" : "Ulaanbaatar",
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "countryCode" : {
+            "description" : "ISO 3166-1 alpha-2 country code",
+            "example" : "MN",
+            "minLength" : 1,
+            "pattern" : "[A-Z]{2}",
+            "type" : "string"
+          },
+          "postalCode" : {
+            "example" : "14200",
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "street" : {
+            "example" : "Peace Ave 1",
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "city", "countryCode", "postalCode", "street" ],
+        "type" : "object"
+      }
+    }
+  },
+  "info" : {
+    "description" : "REST contract of the Order Service, the first slice extracted from the e-commerce monolith (ADR-0007). Errors are RFC 7807 problem details.",
+    "title" : "Order Service API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/customers/{customerId}/orders" : {
+      "get" : {
+        "description" : "Returns an empty list for a customer without orders. The Order Service does not own customers, so it cannot tell an unknown customer from one who never ordered.",
+        "operationId" : "listOrdersByCustomer",
+        "parameters" : [ {
+          "description" : "Customer id as used when placing orders",
+          "example" : "CUST-1",
+          "in" : "path",
+          "name" : "customerId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/CustomerOrderSummaryResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Order summaries, possibly empty"
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "Customer id is longer than 64 characters"
+          }
+        },
+        "summary" : "List the orders of a customer, newest first",
+        "tags" : [ "Orders" ]
+      }
+    },
+    "/api/v1/orders" : {
+      "post" : {
+        "description" : "Creates the order in status PLACED. Audit and customer notification run afterwards on an asynchronous side-channel and never delay or fail this response.",
+        "operationId" : "placeOrder",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateOrderRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderResponse"
+                }
+              }
+            },
+            "description" : "Order placed",
+            "headers" : {
+              "Location" : {
+                "description" : "URI of the new order",
+                "schema" : {
+                  "format" : "uri",
+                  "type" : "string"
+                },
+                "style" : "simple"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "Validation failed, or the order breaks a business rule (mixed currencies, total above 10,000)"
+          }
+        },
+        "summary" : "Place a new order",
+        "tags" : [ "Orders" ]
+      }
+    },
+    "/api/v1/orders/{orderId}" : {
+      "get" : {
+        "operationId" : "getOrderById",
+        "parameters" : [ {
+          "description" : "Order id returned when the order was placed",
+          "example" : "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d",
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderResponse"
+                }
+              }
+            },
+            "description" : "Order found"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "No order has this id"
+          }
+        },
+        "summary" : "Retrieve an order by its id",
+        "tags" : [ "Orders" ]
+      }
+    },
+    "/api/v1/orders/{orderId}/cancellation" : {
+      "put" : {
+        "operationId" : "cancelOrder",
+        "parameters" : [ {
+          "description" : "Order id",
+          "example" : "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d",
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Order is now CANCELLED"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "No order has this id"
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The order was already cancelled"
+          }
+        },
+        "summary" : "Cancel an order",
+        "tags" : [ "Orders" ]
+      }
+    },
+    "/api/v1/orders/{orderId}/payment" : {
+      "put" : {
+        "operationId" : "payOrder",
+        "parameters" : [ {
+          "description" : "Order id",
+          "example" : "0b9f6c1e-6f0a-4c58-9a59-3f1f3f1c2b7d",
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Order is now PAID"
+          },
+          "404" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "No order has this id"
+          },
+          "409" : {
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description" : "The order is not in a state that can be paid"
+          }
+        },
+        "summary" : "Record that a placed order was paid",
+        "tags" : [ "Orders" ]
+      }
+    }
+  },
+  "servers" : [ {
+    "description" : "Local development",
+    "url" : "http://localhost:8080"
+  } ],
+  "tags" : [ {
+    "description" : "Place, read, pay and cancel customer orders",
+    "name" : "Orders"
+  } ]
+}
