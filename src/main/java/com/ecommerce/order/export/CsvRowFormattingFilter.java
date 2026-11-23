@@ -15,7 +15,7 @@ public class CsvRowFormattingFilter implements Filter<ExportStages.Taxed, String
                 quote(order.customerId()),
                 quote(order.status()),
                 order.amount().amount().toPlainString(),
-                quote(order.amount().currency()),
+                quote(order.amount().currencyCode()),
                 normalized.amountUsd().amount().toPlainString(),
                 taxed.taxUsd().amount().toPlainString(),
                 quote(order.createdAt().toString())));

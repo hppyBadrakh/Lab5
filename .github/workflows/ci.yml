@@ -2,16 +2,16 @@ name: CI
 
 on:
   pull_request:
-    branches: [m6-styles]
+    branches: [m6-styles, m6-ddd]
   push:
-    branches: [m6-styles]
+    branches: [m6-styles, m6-ddd]
 
 permissions:
   contents: read
 
 jobs:
-  compile:
-    name: Compile
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,9 +22,9 @@ jobs:
           cache: maven
       - run: ./mvnw -B test-compile
 
-  mvc-slice:
-    name: MVC slice tests
-    needs: compile
+  test-domain:
+    name: Pure domain tests
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,11 +33,12 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: ./mvnw -B test -Dtest='*MvcTest,*ServiceTest,*DomainTest'
+      # Pure domain tests run without booting Spring.
+      - run: ./mvnw -B test -Dtest='*DomainTest,*AggregateTest,*ValueObjectTest'
 
-  architecture:
-    name: Architecture tests
-    needs: compile
+  verify-architecture:
+    name: Hexagonal architecture fitness
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,11 +47,12 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: ./mvnw -B test -Dtest=ArchitectureLayerEnforcementTest
+      # ArchUnit fails the build on any framework import in the domain or dependency pointing out of the hexagon.
+      - run: ./mvnw -B test -Dtest=HexagonalArchitectureFitnessTest
 
   verify:
     name: Full verify
-    needs: [mvc-slice, architecture]
+    needs: [test-domain, verify-architecture]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

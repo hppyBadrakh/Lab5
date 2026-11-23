@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-01). Change to Accepted once a peer has approved the pull request.
+Proposed (2026-11-01). Superseded by [ADR-0006](0006-hexagonal-ports-adapters.md) for the Order Processing context (2026-11-08).
 
 ## Context
 

@@ -1,6 +1,6 @@
 package com.ecommerce.order.export;
 
-import com.ecommerce.order.domain.Money;
+import com.ecommerce.order.domain.model.Money;
 
 import java.time.Instant;
 
