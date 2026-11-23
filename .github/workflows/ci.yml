@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [m6-styles]
+  push:
+    branches: [m6-styles]
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: Compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: ./mvnw -B test-compile
+
+  mvc-slice:
+    name: MVC slice tests
+    needs: compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: ./mvnw -B test -Dtest='*MvcTest,*ServiceTest,*DomainTest'
+
+  architecture:
+    name: Architecture tests
+    needs: compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: ./mvnw -B test -Dtest=ArchitectureLayerEnforcementTest
+
+  verify:
+    name: Full verify
+    needs: [mvc-slice, architecture]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: ./mvnw -B clean verify
