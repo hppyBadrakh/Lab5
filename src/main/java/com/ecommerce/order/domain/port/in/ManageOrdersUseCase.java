@@ -1,6 +1,7 @@
 package com.ecommerce.order.domain.port.in;
 
 import com.ecommerce.order.domain.model.Order;
+import com.ecommerce.order.domain.model.PaymentResult;
 import com.ecommerce.order.domain.model.ShippingAddress;
 
 import java.math.BigDecimal;
@@ -20,9 +21,21 @@ public interface ManageOrdersUseCase {
     /** Every order of one customer, newest first. An unknown customer simply has no orders. */
     List<Order> listOrdersForCustomer(String customerId);
 
-    Order payOrder(String orderId);
+    /**
+     * Charges the order through the payment port. Returns the order with its new status:
+     * PAID when the gateway charged it, PAYMENT_PENDING when the gateway was unavailable and the
+     * payment intent was deferred.
+     */
+    PaymentReceipt payOrder(String orderId);
 
     Order cancelOrder(String orderId);
+
+    record PaymentReceipt(Order order, PaymentResult payment) {
+
+        public boolean deferred() {
+            return payment.status() == PaymentResult.PaymentStatus.DEFERRED_PENDING;
+        }
+    }
 
     record PlaceOrderCommand(String customerId, AddressCommand shippingAddress, List<OrderLineCommand> lines) {
     }

@@ -82,5 +82,5 @@ Solid boxes and arrows exist in the code today. Dashed ones are planned. The Ord
 - [x] `./mvnw clean verify` green on `feature/distributed-slice`
 - [x] ADR-0007 written, including the service that was not extracted
 - [x] OpenAPI snapshot committed and matching the running service
-- [ ] Peer approval on the `[W10] distributed-slice` pull request
-- [ ] ADR-0006 and ADR-0007 status changed from Proposed to Accepted after approval
+- [x] `[W10] distributed-slice` pull request merged (solo project: no peer reviewer)
+- [x] ADR-0006 and ADR-0007 status changed from Proposed to Accepted

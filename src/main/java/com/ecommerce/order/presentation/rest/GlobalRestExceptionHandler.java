@@ -3,6 +3,7 @@ package com.ecommerce.order.presentation.rest;
 import com.ecommerce.order.application.InvalidOrderOperationException;
 import com.ecommerce.order.application.InvalidOrderRequestException;
 import com.ecommerce.order.application.OrderNotFoundException;
+import com.ecommerce.order.application.PaymentDeclinedException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -38,6 +39,11 @@ public class GlobalRestExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidOrderRequestException.class)
     public ProblemDetail handleInvalidRequest(InvalidOrderRequestException ex) {
         return problem(HttpStatus.BAD_REQUEST, "Business Rule Violation", ex.getMessage());
+    }
+
+    @ExceptionHandler(PaymentDeclinedException.class)
+    public ProblemDetail handlePaymentDeclined(PaymentDeclinedException ex) {
+        return problem(HttpStatus.PAYMENT_REQUIRED, "Payment Declined", ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
